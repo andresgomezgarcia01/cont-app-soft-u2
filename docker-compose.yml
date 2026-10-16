@@ -1,0 +1,101 @@
+# Catálogo de aplicaciones: entorno local completo.
+#
+#   docker compose up -d --build        levanta todo
+#   docker compose up -d db seed        solo base de datos y datos base
+#   docker compose down -v              apaga y BORRA los datos (volumen)
+#
+# Los valores por defecto sirven para desarrollo local. Para cambiarlos, copiar
+# .env.example a .env. No usar estas credenciales fuera de un entorno local.
+
+name: catalogo-apps
+
+services:
+  # ---------------------------------------------------------------------------
+  # Base de datos: imagen propia (db/Dockerfile) basada en PostgreSQL.
+  # Crea las tablas la primera vez que arranca con el volumen vacío.
+  # ---------------------------------------------------------------------------
+  db:
+    build: ./db
+    image: catalogo-db:1.0
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-catalogo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-catalogo}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      # Solo escucha en la máquina local, útil para inspeccionar con un cliente SQL.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      # -h 127.0.0.1 consulta por TCP a propósito: durante la inicialización, Postgres
+      # corre un servidor temporal que solo escucha por socket Unix. Sin -h, la base
+      # aparecería "sana" antes de tiempo y seed/api arrancarían demasiado pronto.
+      # $$ evita que Compose sustituya la variable: la resuelve el shell del contenedor.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Seed: job de ejecución única. Espera a que la BD esté sana, carga los datos
+  # base (db/seed/seed.sql, idempotente) y termina.
+  # ---------------------------------------------------------------------------
+  seed:
+    image: postgres:17-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-catalogo}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
+      PGDATABASE: ${POSTGRES_DB:-catalogo}
+    volumes:
+      - ./db/seed:/seed:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/seed/seed.sql"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # API REST. Requiere backend/Dockerfile (lo aporta quien desarrolle el backend).
+  # Contrato: docs/api/openapi.yaml. Escucha en el puerto 8080 del contenedor.
+  # ---------------------------------------------------------------------------
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-catalogo}
+      DB_USER: ${POSTGRES_USER:-catalogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
+      MAX_BATCH_SIZE: ${MAX_BATCH_SIZE:-100}
+      CORS_ORIGIN: http://localhost:${WEB_PORT:-3000}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend. Requiere frontend/Dockerfile (lo aporta quien desarrolle el front).
+  # Sirve la interfaz en el puerto 80 del contenedor. El navegador llama a la
+  # API usando API_BASE_URL.
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ./frontend
+      args:
+        API_BASE_URL: http://localhost:${API_PORT:-8080}
+    environment:
+      API_BASE_URL: http://localhost:${API_PORT:-8080}
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:

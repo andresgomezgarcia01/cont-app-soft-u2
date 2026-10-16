@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────
+# .gitignore en modo ALLOWLIST
+#
+# Por defecto se ignora TODO lo que hay en la raíz del repo. Solo se
+# versiona lo que se re-incluye explícitamente con "!" más abajo.
+#
+# Para publicar algo nuevo, agrégalo en la sección "Lo que SÍ se sube":
+#   !/src/          ← un directorio completo (con todo su contenido)
+#   !/LICENSE       ← un archivo de la raíz
+# ─────────────────────────────────────────────────────────────────────────
+
+# 1. Ignorar todo lo que cuelga de la raíz
+/*
+
+# 2. Lo que SÍ se sube
+!/.gitignore
+!/README.md
+!/.env.example
+!/Makefile
+!/docker-compose.yml
+!/db/
+!/backend/
+!/frontend/
+!/docs/
+
+# 3. Defensa en profundidad: aunque un directorio esté re-incluido,
+#    estos patrones siguen ignorándose en cualquier nivel.
+
+# Secretos y configuración local
+*.pem
+*.key
+credentials.json
+.env
+.env.*
+!.env.example
+
+# Dependencias y compilados
+node_modules/
+dist/
+build/
+target/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs y temporales
+*.log
+*.swp
+
+# Editores e IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,635 @@
+openapi: 3.0.3
+
+info:
+  title: API del Catálogo de Aplicaciones
+  version: 1.0.0
+  description: |
+    Contrato de la API REST del catálogo. Es la fuente de verdad que comparten
+    backend y frontend: se implementa en el backend y se consume desde el frontend.
+
+    **Recursos**
+    - `aplicacion`: una aplicación de la organización.
+    - `despliegue`: dónde y en qué versión está desplegada una aplicación (1 aplicación : N despliegues).
+
+    **Convenciones**
+    - JSON en UTF-8, nombres de campo en `snake_case`, en español.
+    - Fechas en formato ISO 8601 (`2026-10-16` y `2026-10-16T15:30:00Z`).
+    - Todos los errores usan el mismo formato (`Error`). Ver `docs/errores.md`.
+    - La carga masiva es "todo o nada" y tiene un tope configurable (`MAX_BATCH_SIZE`, 100 por defecto).
+
+servers:
+  - url: http://localhost:8080
+    description: Entorno local con Docker Compose
+
+tags:
+  - name: Aplicaciones
+  - name: Despliegues
+  - name: Carga masiva
+  - name: Salud
+
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Estado del servicio y de la conexión con la base de datos
+      description: Responde 200 si la API puede consultar la base de datos y 503 si no.
+      operationId: verificarSalud
+      responses:
+        '200':
+          description: La API y la base de datos responden
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [estado]
+                properties:
+                  estado:
+                    type: string
+                    example: ok
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+  /api/v1/aplicaciones:
+    get:
+      tags: [Aplicaciones]
+      summary: Listar aplicaciones (datos básicos)
+      operationId: listarAplicaciones
+      parameters:
+        - name: origen
+          in: query
+          description: Filtra por origen
+          schema:
+            $ref: '#/components/schemas/Origen'
+        - name: modalidad
+          in: query
+          description: Devuelve las aplicaciones que tengan al menos un despliegue con esta modalidad
+          schema:
+            $ref: '#/components/schemas/Modalidad'
+        - name: activa
+          in: query
+          description: Filtra por estado activa / inactiva
+          schema:
+            type: boolean
+        - name: q
+          in: query
+          description: Texto a buscar dentro del nombre (sin distinguir mayúsculas)
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: Lista de aplicaciones (vacía si no hay coincidencias)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AplicacionResumen'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+    post:
+      tags: [Aplicaciones]
+      summary: Crear una aplicación
+      operationId: crearAplicacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AplicacionEntrada'
+      responses:
+        '201':
+          description: Aplicación creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aplicacion'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+  /api/v1/aplicaciones/lote:
+    post:
+      tags: [Carga masiva]
+      summary: Crear varias aplicaciones, cada una con sus despliegues, en una sola petición
+      description: |
+        Todo o nada: se procesa en una sola transacción. Si un elemento falla no se guarda
+        ninguno y el error indica en `detalles[].indice` la posición (desde 0) del primer
+        elemento con problema.
+
+        Se aplican las mismas validaciones y reglas de negocio que en la creación individual.
+        El arreglo no puede estar vacío ni superar `MAX_BATCH_SIZE` elementos (100 por defecto).
+      operationId: crearAplicacionesEnLote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/AplicacionLoteEntrada'
+            example:
+              - nombre: Portal de Proveedores
+                descripcion: Portal para la gestión de proveedores
+                origen: PROPIA
+                equipo_responsable: Compras
+                despliegues:
+                  - version: 1.0.0
+                    ambiente: PROD
+                    modalidad: NUBE
+                    proveedor_nube: AZURE
+                    ubicacion: brazilsouth
+              - nombre: Herramienta de Tickets
+                origen: PROVEEDOR
+                equipo_responsable: Soporte
+                despliegues:
+                  - version: '2026.1'
+                    ambiente: PROD
+                    modalidad: SAAS
+      responses:
+        '201':
+          description: Todas las aplicaciones fueron creadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoLote'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '413':
+          $ref: '#/components/responses/LoteExcedeLimite'
+        '422':
+          $ref: '#/components/responses/ReglaNegocio'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+  /api/v1/aplicaciones/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdRecurso'
+    get:
+      tags: [Aplicaciones]
+      summary: Detalle de una aplicación con sus despliegues
+      description: Es la vista que muestra la relación entre las dos tablas (JOIN).
+      operationId: obtenerAplicacion
+      responses:
+        '200':
+          description: La aplicación y sus despliegues
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AplicacionDetalle'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+    put:
+      tags: [Aplicaciones]
+      summary: Reemplazar los datos de una aplicación
+      description: |
+        Reemplaza todos los campos editables. Devuelve 422 si se cambia el origen a `PROPIA`
+        y la aplicación tiene despliegues con modalidad `SAAS`.
+      operationId: actualizarAplicacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AplicacionEntrada'
+      responses:
+        '200':
+          description: Aplicación actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aplicacion'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '422':
+          $ref: '#/components/responses/ReglaNegocio'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+    delete:
+      tags: [Aplicaciones]
+      summary: Eliminar una aplicación y, en cascada, sus despliegues
+      operationId: eliminarAplicacion
+      responses:
+        '204':
+          description: Aplicación eliminada
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+  /api/v1/aplicaciones/{id}/despliegues:
+    parameters:
+      - $ref: '#/components/parameters/IdRecurso'
+    get:
+      tags: [Despliegues]
+      summary: Listar los despliegues de una aplicación
+      operationId: listarDespliegues
+      responses:
+        '200':
+          description: Despliegues de la aplicación (vacía si no tiene)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Despliegue'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+    post:
+      tags: [Despliegues]
+      summary: Registrar un despliegue para una aplicación
+      description: Devuelve 422 si la modalidad es `SAAS` y la aplicación es de origen `PROPIA`.
+      operationId: crearDespliegue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DespliegueEntrada'
+      responses:
+        '201':
+          description: Despliegue creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Despliegue'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '422':
+          $ref: '#/components/responses/ReglaNegocio'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+  /api/v1/despliegues/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdRecurso'
+    put:
+      tags: [Despliegues]
+      summary: Reemplazar los datos de un despliegue
+      operationId: actualizarDespliegue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DespliegueEntrada'
+      responses:
+        '200':
+          description: Despliegue actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Despliegue'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '422':
+          $ref: '#/components/responses/ReglaNegocio'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+    delete:
+      tags: [Despliegues]
+      summary: Eliminar un despliegue
+      operationId: eliminarDespliegue
+      responses:
+        '204':
+          description: Despliegue eliminado
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '503':
+          $ref: '#/components/responses/ServicioNoDisponible'
+
+components:
+  parameters:
+    IdRecurso:
+      name: id
+      in: path
+      required: true
+      description: Identificador numérico del recurso
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    Origen:
+      type: string
+      enum: [PROPIA, PROVEEDOR]
+      description: PROPIA es desarrollada internamente. PROVEEDOR es un producto de un tercero.
+
+    Ambiente:
+      type: string
+      enum: [DEV, QA, PROD]
+
+    Modalidad:
+      type: string
+      enum: [ON_PREMISE, NUBE, SAAS]
+
+    ProveedorNube:
+      type: string
+      enum: [AWS, AZURE, GCP, OTRO]
+
+    AplicacionEntrada:
+      type: object
+      required: [nombre, origen, equipo_responsable]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Único en el catálogo
+          example: Portal de Clientes
+        descripcion:
+          type: string
+          nullable: true
+          example: Portal web donde los clientes consultan sus productos
+        origen:
+          $ref: '#/components/schemas/Origen'
+        equipo_responsable:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Canales Digitales
+        activa:
+          type: boolean
+          default: true
+
+    Aplicacion:
+      allOf:
+        - $ref: '#/components/schemas/AplicacionEntrada'
+        - type: object
+          required: [id, activa, fecha_registro]
+          properties:
+            id:
+              type: integer
+              example: 1
+            activa:
+              type: boolean
+            fecha_registro:
+              type: string
+              format: date
+              readOnly: true
+              description: La asigna el servidor al crear la aplicación
+              example: '2026-10-16'
+
+    AplicacionResumen:
+      type: object
+      required: [id, nombre, origen, equipo_responsable, activa, fecha_registro, total_despliegues]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        origen:
+          $ref: '#/components/schemas/Origen'
+        equipo_responsable:
+          type: string
+        activa:
+          type: boolean
+        fecha_registro:
+          type: string
+          format: date
+        total_despliegues:
+          type: integer
+          minimum: 0
+
+    AplicacionDetalle:
+      allOf:
+        - $ref: '#/components/schemas/Aplicacion'
+        - type: object
+          required: [despliegues]
+          properties:
+            despliegues:
+              type: array
+              items:
+                $ref: '#/components/schemas/Despliegue'
+
+    DespliegueEntrada:
+      type: object
+      required: [version, ambiente, modalidad]
+      properties:
+        version:
+          type: string
+          minLength: 1
+          maxLength: 30
+          example: 2.3.0
+        ambiente:
+          $ref: '#/components/schemas/Ambiente'
+        modalidad:
+          $ref: '#/components/schemas/Modalidad'
+        proveedor_nube:
+          allOf:
+            - $ref: '#/components/schemas/ProveedorNube'
+          nullable: true
+          description: Obligatorio si la modalidad es NUBE. Debe omitirse o ser null en las demás.
+        ubicacion:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: Región de la nube o datacenter
+          example: us-east-1
+        desplegado_en:
+          type: string
+          format: date-time
+          description: Si se omite, el servidor usa la fecha y hora actuales
+          example: '2026-10-16T15:30:00Z'
+
+    Despliegue:
+      allOf:
+        - $ref: '#/components/schemas/DespliegueEntrada'
+        - type: object
+          required: [id, aplicacion_id, desplegado_en]
+          properties:
+            id:
+              type: integer
+            aplicacion_id:
+              type: integer
+            desplegado_en:
+              type: string
+              format: date-time
+
+    AplicacionLoteEntrada:
+      allOf:
+        - $ref: '#/components/schemas/AplicacionEntrada'
+        - type: object
+          properties:
+            despliegues:
+              type: array
+              description: Despliegues de esta aplicación (opcional)
+              items:
+                $ref: '#/components/schemas/DespliegueEntrada'
+
+    ResultadoLote:
+      type: object
+      required: [total_aplicaciones, total_despliegues, ids_aplicaciones]
+      properties:
+        total_aplicaciones:
+          type: integer
+          example: 2
+        total_despliegues:
+          type: integer
+          example: 2
+        ids_aplicaciones:
+          type: array
+          description: Ids asignados, en el mismo orden del arreglo recibido
+          items:
+            type: integer
+
+    DetalleError:
+      type: object
+      properties:
+        campo:
+          type: string
+          description: Campo con problema (puede incluir ruta, por ejemplo despliegues[0].modalidad)
+        indice:
+          type: integer
+          minimum: 0
+          description: Solo en carga masiva. Posición del elemento con problema, desde 0
+        motivo:
+          type: string
+
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+          enum:
+            - PETICION_INVALIDA
+            - NO_ENCONTRADO
+            - CONFLICTO
+            - REGLA_NEGOCIO
+            - LOTE_EXCEDE_LIMITE
+            - ERROR_INTERNO
+            - SERVICIO_NO_DISPONIBLE
+        mensaje:
+          type: string
+          description: Texto legible, apto para mostrarse al usuario
+        detalles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetalleError'
+
+  responses:
+    PeticionInvalida:
+      description: JSON malformado, campo faltante, tipo o valor inválido, o id no numérico
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: PETICION_INVALIDA
+            mensaje: El campo ambiente debe ser DEV, QA o PROD
+            detalles:
+              - campo: ambiente
+                motivo: valor fuera del catálogo
+    NoEncontrado:
+      description: El recurso solicitado no existe
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: NO_ENCONTRADO
+            mensaje: No existe una aplicación con id 42
+            detalles: []
+    Conflicto:
+      description: Ya existe una aplicación con ese nombre
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: CONFLICTO
+            mensaje: Ya existe una aplicación llamada CRM Comercial
+            detalles:
+              - campo: nombre
+                motivo: duplicado
+    ReglaNegocio:
+      description: La petición es válida pero incumple una regla de negocio
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: REGLA_NEGOCIO
+            mensaje: Si la modalidad es NUBE, proveedor_nube es obligatorio
+            detalles:
+              - campo: proveedor_nube
+                motivo: obligatorio cuando modalidad es NUBE
+    LoteExcedeLimite:
+      description: El lote trae más elementos que MAX_BATCH_SIZE
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: LOTE_EXCEDE_LIMITE
+            mensaje: El lote trae 150 aplicaciones y el máximo permitido es 100
+            detalles: []
+    ErrorInterno:
+      description: Falla inesperada. El detalle técnico queda en el log, nunca en la respuesta
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: ERROR_INTERNO
+            mensaje: Ocurrió un error inesperado. Intenta de nuevo más tarde
+            detalles: []
+    ServicioNoDisponible:
+      description: La API está en ejecución pero no logra conectar con la base de datos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: SERVICIO_NO_DISPONIBLE
+            mensaje: El servicio no está disponible temporalmente
+            detalles: []
