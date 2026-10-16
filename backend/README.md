@@ -37,9 +37,25 @@ Hay que entregar un `backend/Dockerfile`. Con cualquier lenguaje deben cumplirse
 1. **Escuchar en `0.0.0.0`**, no en `localhost`. Si escucha solo en `localhost`, dentro del contenedor nadie podrá conectarse, aunque el puerto esté publicado.
 2. **Puerto:** el definido por la variable `PORT`, que Compose fija en `8080`.
 3. **Todo por variables de entorno.** Ninguna credencial ni dirección va escrita en el código ni en la imagen.
-4. **Terminar bien con `SIGTERM`.** `docker stop` envía `SIGTERM` y a los 10 s mata el proceso. La aplicación debería cerrar conexiones y salir; algunos entornos exigen que el proceso sea el principal del contenedor (usar la forma *exec* de `CMD`).
+4. **Terminar bien con `SIGTERM`.** `docker stop` envía `SIGTERM` y a los 10 s mata el proceso. Usar la forma *exec* de `CMD` para que la señal llegue a la aplicación. Compose ya pone `init: true` en `api`, así que la señal llega aunque el runtime la ignore como proceso 1 (le pasa a Node).
 5. **Logs a la salida estándar**, para verlos con `docker logs`.
 6. **Imagen liviana:** idealmente con *multi-stage build*, y un archivo `.dockerignore` que excluya dependencias locales y archivos de desarrollo.
+
+### Plantillas de Dockerfile
+
+En [`plantillas/`](plantillas/) hay un Dockerfile de partida por stack, ya probado: construye, corre sin `root`, escucha en `PORT` y se detiene al instante con `docker stop`. Cuando el grupo elija el stack:
+
+```bash
+cp backend/plantillas/Dockerfile.node backend/Dockerfile     # o .python, o .java
+```
+
+Luego ajustar las líneas marcadas con **AJUSTAR** (punto de entrada) y borrar la carpeta `plantillas/` y las líneas de `.dockerignore` que no apliquen.
+
+| Plantilla | Supone | Imagen final de prueba |
+|---|---|---|
+| `Dockerfile.node` | `package.json`, `package-lock.json` y `src/index.js` | `node:24-alpine`, unos 250 MB |
+| `Dockerfile.python` | `requirements.txt` y `app/main.py` con el objeto `app` (FastAPI con uvicorn) | `python:3.13-slim`, unos 220 MB |
+| `Dockerfile.java` | `pom.xml` y `src/` (Spring Boot); `server.port=${PORT:8080}` en `application.properties` | `eclipse-temurin:21-jre-alpine`, unos 330 MB |
 
 ## Variables de entorno
 

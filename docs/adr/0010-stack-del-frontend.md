@@ -14,6 +14,8 @@ La interfaz consume la API definida en [`openapi.yaml`](../api/openapi.yaml). La
 - **Servible por nginx:** que el resultado sean archivos estáticos que nginx pueda servir, con llamadas relativas a `/api/` ([ADR-0011](0011-interfaz-reenvia-llamadas-a-la-api.md)).
 - **Formularios y tablas:** que haga razonablemente fácil el manejo de formularios con validación y de listas con búsqueda.
 
+El `Dockerfile` y el `nginx.conf` ya están preparados para cualquiera de las opciones: solo cambia la etapa de build ([`frontend/README.md`](../../frontend/README.md#requisitos-del-contenedor)).
+
 ## Decisión
 
 | Aspecto | Elección |

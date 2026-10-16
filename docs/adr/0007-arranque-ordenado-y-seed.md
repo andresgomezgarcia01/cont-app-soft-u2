@@ -13,7 +13,7 @@ PostgreSQL tarda unos segundos en aceptar conexiones. Si la API arranca antes, f
 - `seed` y `api` usan `depends_on` con `condition: service_healthy`: no arrancan hasta que la base de datos responde.
 - **`seed` es un job a pedido**: pertenece al perfil `seed` (`profiles: ["seed"]`), así que `docker compose up` **no** lo ejecuta. Se carga con `docker compose run --rm seed` (atajo: `make seed`), que levanta `db` si hace falta, espera a que esté sana, ejecuta `db/seed/seed.sql` y borra el contenedor.
 - Nombrar el servicio `seed` en un comando de Compose activa su perfil. Por eso ningún comando del arranque normal lo nombra.
-- El script de seed es **idempotente** (`ON CONFLICT DO NOTHING` y `WHERE NOT EXISTS`): ejecutarlo varias veces no duplica datos.
+- El script de seed es **idempotente** (`ON CONFLICT DO NOTHING` sobre `uq_aplicacion_nombre` y `uq_despliegue_aplicacion_ambiente`): ejecutarlo varias veces no duplica datos.
 - La API **no depende** del seed. Los datos base son útiles en desarrollo, no críticos.
 - Si la base de datos se cae con la API ya en ejecución, la API responde `503` ([errores.md](../errores.md)).
 

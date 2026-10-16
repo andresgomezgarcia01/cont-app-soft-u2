@@ -2,6 +2,9 @@
 # que ejecuta, así que sirve también como referencia (ver docs/comandos.md).
 # Uso: make <objetivo>        Lista de objetivos: make help
 
+# Lee .env si existe, para que los atajos usen los mismos puertos que Compose.
+-include .env
+
 .DEFAULT_GOAL := help
 .PHONY: help up up-db seed build down reset ps logs db-shell health
 
@@ -36,4 +39,4 @@ db-shell: ## Abre psql dentro del contenedor de la base de datos
 	docker compose exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 health: ## Consulta el estado de la API
-	curl -s http://localhost:$${API_PORT:-8080}/health
+	curl -s http://localhost:$(or $(API_PORT),8080)/health

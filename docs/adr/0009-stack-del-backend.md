@@ -26,7 +26,7 @@ El contrato de la API ([`openapi.yaml`](../api/openapi.yaml)), el modelo de dato
 
 ## Requisitos que aplican con cualquier opción
 
-Están en [`backend/README.md`](../../backend/README.md): puerto 8080, escuchar en `0.0.0.0`, variables de entorno, formato de errores, `/health` y manejo de `SIGTERM`.
+Están en [`backend/README.md`](../../backend/README.md): puerto 8080, escuchar en `0.0.0.0`, variables de entorno, formato de errores, `/health` y manejo de `SIGTERM`. Hay plantillas de Dockerfile probadas para Node, Python y Java en [`backend/plantillas/`](../../backend/plantillas/).
 
 ## Consecuencias
 
