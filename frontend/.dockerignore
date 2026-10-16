@@ -1,0 +1,16 @@
+# Lo que no entra al contexto de build de la imagen del frontend.
+node_modules/
+dist/
+.angular/
+.vite/
+coverage/
+.env
+.env.*
+*.log
+.git
+.vscode/
+.idea/
+.DS_Store
+Dockerfile
+.dockerignore
+README.md

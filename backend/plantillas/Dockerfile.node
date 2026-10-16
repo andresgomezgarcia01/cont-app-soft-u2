@@ -1,0 +1,25 @@
+# Plantilla: backend en Node.js (por ejemplo, Express) con el driver pg.
+# Uso: cp backend/plantillas/Dockerfile.node backend/Dockerfile
+#
+# Supone package.json y package-lock.json en backend/ y el punto de entrada en
+# src/index.js (AJUSTAR si es otro). La app debe escuchar en 0.0.0.0 y en
+# process.env.PORT (ver backend/README.md, "Requisitos del contenedor").
+
+# --- Etapa 1: dependencias de producción --------------------------------------
+FROM node:24-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# --- Etapa final -----------------------------------------------------------------
+FROM node:24-alpine
+LABEL org.opencontainers.image.title="catalogo-api"
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# La imagen oficial trae el usuario sin privilegios "node".
+USER node
+EXPOSE 8080
+# Forma exec: node recibe SIGTERM directamente (docker stop).
+CMD ["node", "src/index.js"]

@@ -62,14 +62,18 @@ services:
     restart: "no"
 
   # ---------------------------------------------------------------------------
-  # API REST. Requiere backend/Dockerfile (lo aporta quien desarrolle el backend).
+  # API REST. Requiere backend/Dockerfile: se parte de una de las plantillas de
+  # backend/plantillas/ según el stack elegido (ADR-0009).
   # Contrato: docs/api/openapi.yaml. Escucha en el puerto 8080 del contenedor.
   # Se publica en la máquina para probar el backend solo (p. ej. GET /health);
   # la interfaz no lo necesita, porque le llega a través del proxy de web.
   # DB_PORT es fijo: es el puerto de db dentro de la red interna.
+  # init: true pone un init mínimo (tini) como proceso 1, que reenvía SIGTERM a
+  # la API. Sin él, Node como proceso 1 ignora SIGTERM y docker stop espera 10 s.
   # ---------------------------------------------------------------------------
   api:
     build: ./backend
+    init: true
     depends_on:
       db:
         condition: service_healthy
@@ -86,10 +90,11 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Frontend. Requiere frontend/Dockerfile (lo aporta quien desarrolle el front).
-  # Su nginx sirve la interfaz en el puerto 80 del contenedor y reenvía /api/ a
-  # http://api:8080 (proxy inverso). El navegador solo habla con localhost:3000,
-  # con rutas relativas (/api/v1/...), así que no hace falta CORS.
+  # Frontend. frontend/Dockerfile y frontend/nginx.conf ya están; falta la
+  # interfaz (ADR-0010). Su nginx sirve la interfaz en el puerto 80 del
+  # contenedor y reenvía /api/ a http://api:8080 (proxy inverso). El navegador
+  # solo habla con localhost:3000, con rutas relativas (/api/v1/...), así que no
+  # hace falta CORS. Para probarlo sin la API: docker compose up -d --build --no-deps web
   # ---------------------------------------------------------------------------
   web:
     build: ./frontend

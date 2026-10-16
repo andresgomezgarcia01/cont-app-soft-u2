@@ -42,8 +42,9 @@ docker compose down -v     # apaga y BORRA los datos
 
 No hace falta crear un `.env`: los valores por defecto están en `docker-compose.yml`. Para cambiarlos, copiar `.env.example` a `.env`.
 
-> **Mientras no existan `backend/Dockerfile` y `frontend/Dockerfile`**, `docker compose up` falla al construir la API y el frontend. La base de datos sí se puede levantar sola con `docker compose up -d --build db`; si se quieren datos, cargarlos con `docker compose run --rm seed`. Para revisar:
-> `docker compose exec db psql -U catalogo -d catalogo -c "SELECT * FROM aplicacion;"`.
+> **Mientras no exista `backend/Dockerfile`**, `docker compose up` falla al construir la API. Se crea copiando la plantilla del stack elegido desde `backend/plantillas/` (ver [backend/README.md](backend/README.md#plantillas-de-dockerfile)). Mientras tanto:
+> - La base de datos se levanta sola con `docker compose up -d --build db`; si se quieren datos, `docker compose run --rm seed`. Para revisar: `docker compose exec db psql -U catalogo -d catalogo -c "SELECT * FROM aplicacion;"`.
+> - El frontend se levanta sin la API con `docker compose up -d --build --no-deps web` (en `/api/` responde `502` hasta que exista la API).
 
 El archivo `Makefile` ofrece atajos (`make up`, `make up-db`, `make seed`, `make down`, `make reset`...). Cada atajo imprime el comando Docker real que ejecuta. Para ver la lista: `make help`.
 
@@ -69,7 +70,10 @@ cont-app-soft-u2/
     schema.sql            tablas, claves y restricciones
     seed/seed.sql         datos base a pedido (idempotente)
   backend/                API REST (ver backend/README.md)
+    plantillas/           Dockerfile de partida para Node, Python y Java
   frontend/               interfaz web (ver frontend/README.md)
+    Dockerfile            imagen de nginx con la interfaz
+    nginx.conf            sirve la interfaz y reenvía /api/ a la API
   docs/                   documentación del proyecto
 ```
 
@@ -89,11 +93,11 @@ cont-app-soft-u2/
 
 | Parte | Estado |
 |---|---|
-| Base de datos (`schema.sql`, `seed.sql`, `db/Dockerfile`) | Definida. Probada contra PostgreSQL 16: crea las tablas, el seed es idempotente y las restricciones rechazan los datos inválidos. Falta probar la imagen `postgres:17-alpine` dentro de Docker. |
+| Base de datos (`schema.sql`, `seed.sql`, `db/Dockerfile`) | Lista y probada en Docker con `postgres:17-alpine`: crea las tablas en el primer arranque, `db` queda *healthy*, el seed a pedido es idempotente, las restricciones rechazan los datos inválidos y los datos sobreviven a `down` y `up`. El esquema puede cambiar según [pendientes.md](docs/pendientes.md) #17. |
 | Contrato de la API (`openapi.yaml`) | Definido y validado como OpenAPI 3.0.3. |
-| `docker-compose.yml` | Validado con `docker compose config`. Falta ejecutarlo. |
-| Backend | Pendiente |
-| Frontend | Pendiente |
+| `docker-compose.yml` | Probado en Docker de punta a punta con una API de prueba: orden de arranque, reenvío de `web` a `api`, `502` con la API caída y `down` sin esperas. |
+| Backend | Plantillas de Dockerfile listas y probadas (Node, Python y Java). Falta elegir el stack ([ADR-0009](docs/adr/0009-stack-del-backend.md)) y la implementación. |
+| Frontend | `Dockerfile` y `nginx.conf` listos y probados. Falta elegir el framework ([ADR-0010](docs/adr/0010-stack-del-frontend.md)) y la interfaz. |
 | Video | Pendiente |
 
 ## Reglas del equipo

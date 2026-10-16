@@ -51,7 +51,14 @@ La rúbrica pide "todos los estándares UX/UI" sin definirlos ([pendientes.md](.
 
 ## Requisitos del contenedor
 
-Hay que entregar un `frontend/Dockerfile`. Con cualquier herramienta deben cumplirse estos puntos:
+`frontend/Dockerfile`, `frontend/nginx.conf` y `frontend/.dockerignore` **ya están** y cumplen los puntos de abajo. Hoy la imagen sirve la página por defecto de nginx, con el reenvío de `/api/` activo. Cuando se elija el framework, solo hay que activar las líneas comentadas del `Dockerfile`:
+
+- **Con framework** (React + Vite, Angular...): la etapa `build` y `COPY --from=build`, ajustando la carpeta de salida (Vite: `dist/`; Angular: `dist/<proyecto>/browser/`).
+- **Sin framework:** poner los archivos en `frontend/public/` y activar `COPY public/`.
+
+`nginx.conf` devuelve `index.html` para cualquier ruta que no sea un archivo, así que las rutas de una SPA funcionan al recargar. Para probar la interfaz sin la API: `docker compose up -d --build --no-deps web`.
+
+Puntos que se cumplen:
 
 1. **Sirve la interfaz en el puerto 80 del contenedor.** Compose lo publica en el 3000 de la máquina.
 2. **Un solo contenedor, un solo proceso:** por ejemplo, construir los archivos estáticos en una etapa (*multi-stage build*) y servirlos con nginx en la etapa final.
