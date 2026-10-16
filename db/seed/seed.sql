@@ -2,11 +2,13 @@
 -- Datos base del catálogo (seed)
 --
 -- Idempotente: se puede ejecutar varias veces sin duplicar registros.
--- Los ejecuta el servicio "seed" de docker-compose.yml, un job de ejecución
--- única que termina cuando acaba de cargar.
+-- NO se ejecuta al arrancar el entorno: la base arranca vacía. Se carga a
+-- propósito con el servicio "seed" de docker-compose.yml (perfil "seed"):
+--   docker compose run --rm seed      o bien      make seed
 --
--- Carga 4 aplicaciones y 6 despliegues (10 registros). El resto de los datos
--- de la actividad se ingresan desde la aplicación (formulario y carga masiva).
+-- Carga 4 aplicaciones y 6 despliegues (10 registros), como máximo un
+-- despliegue por aplicación y ambiente. El resto de los datos de la actividad
+-- se ingresan desde la aplicación (formulario y carga masiva).
 -- Todos los datos son ficticios.
 -- ============================================================================
 
@@ -28,6 +30,7 @@ INSERT INTO aplicacion (nombre, descripcion, origen, equipo_responsable, activa)
 ON CONFLICT (nombre) DO NOTHING;
 
 -- Despliegues: se enlazan a la aplicación por nombre para no depender de ids.
+-- Si la aplicación ya tiene un despliegue en ese ambiente, no se toca.
 INSERT INTO despliegue (aplicacion_id, version, ambiente, modalidad, proveedor_nube, ubicacion)
 SELECT a.id, v.version, v.ambiente, v.modalidad, v.proveedor_nube, v.ubicacion
 FROM (VALUES
@@ -39,12 +42,6 @@ FROM (VALUES
     ('Gestor Documental Legado', '1.9.2',    'PROD', 'ON_PREMISE', NULL,  'Datacenter alterno')
 ) AS v (app, version, ambiente, modalidad, proveedor_nube, ubicacion)
 JOIN aplicacion a ON a.nombre = v.app
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM despliegue d
-    WHERE d.aplicacion_id = a.id
-      AND d.version       = v.version
-      AND d.ambiente      = v.ambiente
-);
+ON CONFLICT ON CONSTRAINT uq_despliegue_aplicacion_ambiente DO NOTHING;
 
 COMMIT;

@@ -9,17 +9,21 @@ info:
 
     **Recursos**
     - `aplicacion`: una aplicación de la organización.
-    - `despliegue`: dónde y en qué versión está desplegada una aplicación (1 aplicación : N despliegues).
+    - `despliegue`: la versión que hoy está desplegada en un ambiente, dónde y desde cuándo.
+      Una aplicación tiene de 0 a 3 despliegues: como máximo uno por ambiente. No se guarda historial.
 
     **Convenciones**
     - JSON en UTF-8, nombres de campo en `snake_case`, en español.
     - Fechas en formato ISO 8601 (`2026-10-16` y `2026-10-16T15:30:00Z`).
     - Todos los errores usan el mismo formato (`Error`). Ver `docs/errores.md`.
+    - Por ahora la API solo permite crear y consultar: no se edita ni se elimina.
     - La carga masiva es "todo o nada" y tiene un tope configurable (`MAX_BATCH_SIZE`, 100 por defecto).
 
 servers:
+  - url: http://localhost:3000
+    description: A través de web (su nginx reenvía /api/ a la API). Es la que usa la interfaz
   - url: http://localhost:8080
-    description: Entorno local con Docker Compose
+    description: Directo a la API, para probar el backend por separado
 
 tags:
   - name: Aplicaciones
@@ -29,10 +33,18 @@ tags:
 
 paths:
   /health:
+    servers:
+      - url: http://localhost:8080
+        description: Directo a la API
     get:
       tags: [Salud]
       summary: Estado del servicio y de la conexión con la base de datos
-      description: Responde 200 si la API puede consultar la base de datos y 503 si no.
+      description: |
+        Responde 200 si la API puede consultar la base de datos y 503 si no.
+
+        Solo responde directo en la API (`http://localhost:8080/health`, también
+        `make health`). No pasa por `web`: su nginx solo reenvía `/api/`, así que
+        `http://localhost:3000/health` no llega a la API.
       operationId: verificarSalud
       responses:
         '200':
@@ -55,21 +67,6 @@ paths:
       summary: Listar aplicaciones (datos básicos)
       operationId: listarAplicaciones
       parameters:
-        - name: origen
-          in: query
-          description: Filtra por origen
-          schema:
-            $ref: '#/components/schemas/Origen'
-        - name: modalidad
-          in: query
-          description: Devuelve las aplicaciones que tengan al menos un despliegue con esta modalidad
-          schema:
-            $ref: '#/components/schemas/Modalidad'
-        - name: activa
-          in: query
-          description: Filtra por estado activa / inactiva
-          schema:
-            type: boolean
         - name: q
           in: query
           description: Texto a buscar dentro del nombre (sin distinguir mayúsculas)
@@ -128,6 +125,13 @@ paths:
 
         Se aplican las mismas validaciones y reglas de negocio que en la creación individual.
         El arreglo no puede estar vacío ni superar `MAX_BATCH_SIZE` elementos (100 por defecto).
+
+        Se valida elemento por elemento, en orden: formato (400), reglas de negocio (422) y,
+        al guardar, duplicados (409). El primer error corta, se hace `ROLLBACK` y se reporta el
+        `indice` de ese elemento.
+
+        Duplicados (409): un nombre que ya existe o que se repite dentro del lote (se reporta en
+        la segunda aparición), o dos despliegues del mismo ambiente dentro de una misma aplicación.
       operationId: crearAplicacionesEnLote
       requestBody:
         required: true
@@ -199,53 +203,6 @@ paths:
           $ref: '#/components/responses/ErrorInterno'
         '503':
           $ref: '#/components/responses/ServicioNoDisponible'
-    put:
-      tags: [Aplicaciones]
-      summary: Reemplazar los datos de una aplicación
-      description: |
-        Reemplaza todos los campos editables. Devuelve 422 si se cambia el origen a `PROPIA`
-        y la aplicación tiene despliegues con modalidad `SAAS`.
-      operationId: actualizarAplicacion
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AplicacionEntrada'
-      responses:
-        '200':
-          description: Aplicación actualizada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Aplicacion'
-        '400':
-          $ref: '#/components/responses/PeticionInvalida'
-        '404':
-          $ref: '#/components/responses/NoEncontrado'
-        '409':
-          $ref: '#/components/responses/Conflicto'
-        '422':
-          $ref: '#/components/responses/ReglaNegocio'
-        '500':
-          $ref: '#/components/responses/ErrorInterno'
-        '503':
-          $ref: '#/components/responses/ServicioNoDisponible'
-    delete:
-      tags: [Aplicaciones]
-      summary: Eliminar una aplicación y, en cascada, sus despliegues
-      operationId: eliminarAplicacion
-      responses:
-        '204':
-          description: Aplicación eliminada
-        '400':
-          $ref: '#/components/responses/PeticionInvalida'
-        '404':
-          $ref: '#/components/responses/NoEncontrado'
-        '500':
-          $ref: '#/components/responses/ErrorInterno'
-        '503':
-          $ref: '#/components/responses/ServicioNoDisponible'
 
   /api/v1/aplicaciones/{id}/despliegues:
     parameters:
@@ -274,7 +231,9 @@ paths:
     post:
       tags: [Despliegues]
       summary: Registrar un despliegue para una aplicación
-      description: Devuelve 422 si la modalidad es `SAAS` y la aplicación es de origen `PROPIA`.
+      description: |
+        Devuelve 409 si la aplicación ya tiene un despliegue en ese ambiente, y 422 si incumple
+        una regla de negocio (`proveedor_nube` según la modalidad).
       operationId: crearDespliegue
       requestBody:
         required: true
@@ -293,54 +252,10 @@ paths:
           $ref: '#/components/responses/PeticionInvalida'
         '404':
           $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/Conflicto'
         '422':
           $ref: '#/components/responses/ReglaNegocio'
-        '500':
-          $ref: '#/components/responses/ErrorInterno'
-        '503':
-          $ref: '#/components/responses/ServicioNoDisponible'
-
-  /api/v1/despliegues/{id}:
-    parameters:
-      - $ref: '#/components/parameters/IdRecurso'
-    put:
-      tags: [Despliegues]
-      summary: Reemplazar los datos de un despliegue
-      operationId: actualizarDespliegue
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DespliegueEntrada'
-      responses:
-        '200':
-          description: Despliegue actualizado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Despliegue'
-        '400':
-          $ref: '#/components/responses/PeticionInvalida'
-        '404':
-          $ref: '#/components/responses/NoEncontrado'
-        '422':
-          $ref: '#/components/responses/ReglaNegocio'
-        '500':
-          $ref: '#/components/responses/ErrorInterno'
-        '503':
-          $ref: '#/components/responses/ServicioNoDisponible'
-    delete:
-      tags: [Despliegues]
-      summary: Eliminar un despliegue
-      operationId: eliminarDespliegue
-      responses:
-        '204':
-          description: Despliegue eliminado
-        '400':
-          $ref: '#/components/responses/PeticionInvalida'
-        '404':
-          $ref: '#/components/responses/NoEncontrado'
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '503':
@@ -399,6 +314,7 @@ components:
         activa:
           type: boolean
           default: true
+          description: Al crear, si se omite, vale true
 
     Aplicacion:
       allOf:
@@ -477,7 +393,7 @@ components:
         desplegado_en:
           type: string
           format: date-time
-          description: Si se omite, el servidor usa la fecha y hora actuales
+          description: Desde cuándo está esta versión en este ambiente. Al crear, si se omite, el servidor usa la fecha y hora actuales
           example: '2026-10-16T15:30:00Z'
 
     Despliegue:
@@ -580,17 +496,30 @@ components:
             mensaje: No existe una aplicación con id 42
             detalles: []
     Conflicto:
-      description: Ya existe una aplicación con ese nombre
+      description: |
+        Ya existe una aplicación con ese nombre (`campo: nombre`), o la aplicación ya tiene un
+        despliegue en ese ambiente (`campo: ambiente`)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example:
-            codigo: CONFLICTO
-            mensaje: Ya existe una aplicación llamada CRM Comercial
-            detalles:
-              - campo: nombre
-                motivo: duplicado
+          examples:
+            nombreDuplicado:
+              summary: Nombre de aplicación repetido
+              value:
+                codigo: CONFLICTO
+                mensaje: Ya existe una aplicación llamada CRM Comercial
+                detalles:
+                  - campo: nombre
+                    motivo: duplicado
+            ambienteDuplicado:
+              summary: Ambiente repetido para la misma aplicación
+              value:
+                codigo: CONFLICTO
+                mensaje: La aplicación ya tiene un despliegue en PROD
+                detalles:
+                  - campo: ambiente
+                    motivo: duplicado
     ReglaNegocio:
       description: La petición es válida pero incumple una regla de negocio
       content:

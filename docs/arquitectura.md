@@ -18,31 +18,35 @@ flowchart LR
     W[web - Frontend]
     A[api - Backend REST]
     D[(db - PostgreSQL)]
-    S[seed - job de ejecucion unica]
+    S[seed - job a pedido]
     V[(volumen db_data)]
 
     N -->|HTTP puerto 3000| W
-    N -->|HTTP JSON puerto 8080| A
+    W -->|proxy /api/ a api:8080| A
     A -->|SQL puerto 5432| D
-    S -->|psql| D
+    S -.->|psql, solo con run| D
     D --- V
 ```
 
 - Cada componente corre en **un contenedor con un solo proceso principal**.
-- El navegador descarga la interfaz desde `web` y luego llama a la API directamente en el puerto 8080. Por eso la API habilita CORS para el origen de `web` (variable `CORS_ORIGIN`).
-- Compose crea una red por defecto: los contenedores se encuentran por el nombre del servicio (`db`, `api`). Solo `api` y `seed` hablan con la base de datos.
-- `seed` no es un servicio permanente: se ejecuta, carga los datos y termina.
+- **El navegador solo habla con `web`**, en el puerto 3000. `web` sirve la interfaz y su nginx reenvía `/api/` a `http://api:8080` ([ADR-0011](adr/0011-interfaz-reenvia-llamadas-a-la-api.md)). El frontend llama con rutas relativas (`/api/v1/...`), desde un solo origen, así que no hace falta CORS.
+- El puerto 8080 de `api` también se publica en la máquina, pero solo para probar el backend por separado (`curl http://localhost:8080/health`).
+- `db` no publica puertos: solo la alcanzan `api` y `seed` por la red interna. Para consultarla se usa `docker compose exec db psql ...`.
+- Compose crea una red por defecto: los contenedores se encuentran por el nombre del servicio (`db`, `api`).
+- `seed` (arista punteada) no forma parte del arranque: es un job **a pedido** que solo corre con `docker compose run --rm seed`. Carga los datos base y su contenedor se borra al terminar.
 
 ## 3. Servicios y su orden de arranque
 
 | Servicio | Imagen | Depende de | Condición |
 |---|---|---|---|
 | `db` | `catalogo-db:1.0` (propia, sobre `postgres:17-alpine`) | nada | n/a |
-| `seed` | `postgres:17-alpine` | `db` | `service_healthy` |
+| `seed` (perfil `seed`) | `postgres:17-alpine` | `db` | `service_healthy` |
 | `api` | construida desde `backend/` | `db` | `service_healthy` |
 | `web` | construida desde `frontend/` | `api` | `service_started` |
 
-`db` declara un `healthcheck` con `pg_isready`, consultando por TCP a propósito (ver [ADR-0007](adr/0007-arranque-ordenado-y-seed.md)). Compose no arranca `seed` ni `api` hasta que la base de datos responde, así que **la API no necesita lógica de reintentos al arrancar**. Si la base de datos se cae con la API ya en ejecución, la API responde `503` (ver [errores.md](errores.md)).
+`db` declara un `healthcheck` con `pg_isready`, consultando por TCP a propósito (ver [ADR-0007](adr/0007-arranque-ordenado-y-seed.md)). Compose no arranca `api` hasta que la base de datos responde, así que **la API no necesita lógica de reintentos al arrancar**. Si la base de datos se cae con la API ya en ejecución, la API responde `503` (ver [errores.md](errores.md)).
+
+`seed` pertenece al perfil `seed`: `docker compose up` **no** lo ejecuta. Se lanza a pedido con `docker compose run --rm seed` (o `make seed`), que levanta `db` si hace falta y espera la misma condición `service_healthy`. La API no depende de él.
 
 ## 4. Capas del backend
 
@@ -65,8 +69,8 @@ Controller  ->  Service  ->  Repository  ->  PostgreSQL
 | JSON malformado, campo faltante, tipo o valor inválido | Controller | 400 |
 | La aplicación o el despliegue no existe | Service | 404 |
 | `NUBE` exige `proveedor_nube`; las demás modalidades no lo admiten | Service (y `CHECK` en BD) | 422 |
-| `SAAS` solo para aplicaciones de origen `PROVEEDOR` | Service (involucra dos tablas, no puede ser un `CHECK`) | 422 |
 | Nombre de aplicación repetido | `UNIQUE` en BD, traducido por el Service | 409 |
+| Ambiente repetido para la misma aplicación (alta o carga masiva) | `UNIQUE (aplicacion_id, ambiente)` en BD, traducido por el Service | 409 |
 | Lote vacío o mayor que `MAX_BATCH_SIZE` | Controller | 400 / 413 |
 
 ## 5. Modelo de datos
@@ -87,7 +91,7 @@ erDiagram
         int id PK
         int aplicacion_id FK
         varchar version
-        varchar ambiente
+        varchar ambiente "uno por aplicacion"
         varchar modalidad
         varchar proveedor_nube
         varchar ubicacion
@@ -95,7 +99,9 @@ erDiagram
     }
 ```
 
-Una aplicación tiene de cero a muchos despliegues. Si se elimina la aplicación, se eliminan sus despliegues (`ON DELETE CASCADE`). El esquema completo, con sus restricciones, está en [`db/schema.sql`](../db/schema.sql).
+Una aplicación tiene de cero a muchos despliegues. Si se elimina la aplicación, se eliminan sus despliegues (`ON DELETE CASCADE`).
+
+Un despliegue es el **estado actual**: la versión que hoy está en un ambiente, y `desplegado_en` indica desde cuándo. Hay como máximo uno por aplicación y ambiente (restricción `uq_despliegue_aplicacion_ambiente`), es decir, de 0 a 3 por aplicación. No se guarda historial ([ADR-0004](adr/0004-modelo-de-datos-del-catalogo.md)). Por ahora un despliegue se crea y no se edita: el CRUD completo es un incremento ([pendientes.md](pendientes.md), #11). El esquema completo, con sus restricciones, está en [`db/schema.sql`](../db/schema.sql).
 
 Valores permitidos: `origen` (`PROPIA`, `PROVEEDOR`), `ambiente` (`DEV`, `QA`, `PROD`), `modalidad` (`ON_PREMISE`, `NUBE`, `SAAS`) y `proveedor_nube` (`AWS`, `AZURE`, `GCP`, `OTRO`).
 
@@ -110,18 +116,23 @@ sequenceDiagram
     participant D as PostgreSQL
 
     F->>C: POST /api/v1/aplicaciones/lote con un arreglo JSON
-    C->>C: validar formato y tamano del lote
+    C->>C: validar que sea un arreglo y su tamano
     C->>S: crear en lote
-    S->>S: aplicar reglas de negocio a cada elemento
-    S->>R: guardar todo en una sola transaccion
-    R->>D: BEGIN, INSERT de aplicaciones y despliegues, COMMIT
-    D-->>R: ids asignados
-    R-->>S: ids
-    S-->>C: resultado
+    S->>R: abrir transaccion
+    R->>D: BEGIN
+    loop cada elemento, en orden
+        S->>S: validar el elemento: formato y reglas
+        S->>R: guardar la aplicacion y sus despliegues
+        R->>D: INSERT
+        D-->>R: id asignado
+    end
+    S->>R: confirmar
+    R->>D: COMMIT
+    S-->>C: resultado con los ids
     C-->>F: 201 con el resumen del lote
 ```
 
-Si cualquier elemento falla, se hace `ROLLBACK`: no se guarda nada y el error indica la posición (`indice`) del primer elemento con problema.
+Si cualquier elemento falla, se hace `ROLLBACK`: no se guarda nada y el error indica la posición (`indice`) del primer elemento con problema. Se valida elemento por elemento, en orden, y el primer error corta. Ver [errores.md](errores.md#6-orden-de-las-validaciones).
 
 ## 7. Contenerización
 
@@ -132,18 +143,20 @@ Si cualquier elemento falla, se hace `ROLLBACK`: no se guarda nada y el error in
 
 **Persistencia.** Los datos viven en el volumen nombrado `db_data`, montado en `/var/lib/postgresql/data`. Sobreviven a `docker compose down` y al borrado del contenedor, pero no a `docker compose down -v`. (Con PostgreSQL 18 o superior cambia la ruta de montaje; ver [ADR-0008](adr/0008-persistencia-con-volumen.md).)
 
-**Seed.** Es un contenedor de ejecución única (`restart: "no"`) que corre `db/seed/seed.sql`. Es idempotente: ejecutarlo varias veces no duplica datos.
+**Seed.** Es un job a pedido del perfil `seed`: `docker compose up` no lo ejecuta. Se lanza con `docker compose run --rm seed` (o `make seed`), corre `db/seed/seed.sql` y su contenedor se borra al terminar. Es idempotente: ejecutarlo varias veces no duplica datos. Sirve para desarrollo local; en el video la base arranca vacía.
 
 **Variables de entorno.**
 
 | Variable | Usada por | Por defecto | Descripción |
 |---|---|---|---|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `db`, `seed`, `api` | `catalogo`, `catalogo_dev`, `catalogo` | Credenciales y nombre de la base. Solo para desarrollo local |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | `api` | `db`, `5432`, derivadas de las anteriores | Conexión a la base de datos |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | `api` | `db`, `5432`, derivadas de las anteriores | Conexión a la base de datos. `DB_HOST` y `DB_PORT` son fijos: es la dirección de `db` dentro de la red de Compose |
 | `PORT` | `api` | `8080` | Puerto en el que escucha la API dentro del contenedor |
 | `MAX_BATCH_SIZE` | `api` | `100` | Tope de aplicaciones por carga masiva |
-| `CORS_ORIGIN` | `api` | `http://localhost:3000` | Origen del frontend permitido |
-| `API_BASE_URL` | `web` | `http://localhost:8080` | URL de la API que usa el navegador |
+| `API_PORT` | Compose (`api`) | `8080` | Puerto de la máquina donde se publica la API |
+| `WEB_PORT` | Compose (`web`) | `3000` | Puerto de la máquina donde se publica la interfaz |
+
+`web` no recibe variables: la dirección de la API (`http://api:8080`) va en la configuración de nginx.
 
 ## 8. Decisiones registradas
 
@@ -155,7 +168,8 @@ Si cualquier elemento falla, se hace `ROLLBACK`: no se guarda nada y el error in
 | [0004](adr/0004-modelo-de-datos-del-catalogo.md) | Modelo de datos: aplicación y despliegue (1 a N) |
 | [0005](adr/0005-contrato-de-errores.md) | Formato único de errores y mapeo a códigos HTTP |
 | [0006](adr/0006-carga-masiva-json.md) | Carga masiva con JSON, todo o nada y tope configurable |
-| [0007](adr/0007-arranque-ordenado-y-seed.md) | Arranque ordenado con healthcheck y seed como job único |
+| [0007](adr/0007-arranque-ordenado-y-seed.md) | Arranque ordenado con healthcheck y seed a pedido |
 | [0008](adr/0008-persistencia-con-volumen.md) | Persistencia con volumen nombrado |
 | [0009](adr/0009-stack-del-backend.md) | Lenguaje y framework del backend (pendiente) |
 | [0010](adr/0010-stack-del-frontend.md) | Framework del frontend (pendiente) |
+| [0011](adr/0011-interfaz-reenvia-llamadas-a-la-api.md) | La interfaz reenvía las llamadas a la API |

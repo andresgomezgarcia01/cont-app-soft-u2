@@ -1,7 +1,8 @@
 # Catálogo de aplicaciones: entorno local completo.
 #
-#   docker compose up -d --build        levanta todo
-#   docker compose up -d db seed        solo base de datos y datos base
+#   docker compose up -d --build        levanta db, api y web (la base queda sin datos)
+#   docker compose up -d --build db     solo la base de datos
+#   docker compose run --rm seed        carga los datos base, a propósito (idempotente)
 #   docker compose down -v              apaga y BORRA los datos (volumen)
 #
 # Los valores por defecto sirven para desarrollo local. Para cambiarlos, copiar
@@ -13,6 +14,8 @@ services:
   # ---------------------------------------------------------------------------
   # Base de datos: imagen propia (db/Dockerfile) basada en PostgreSQL.
   # Crea las tablas la primera vez que arranca con el volumen vacío.
+  # No publica puertos: solo la alcanzan los otros servicios por la red interna.
+  # Para consultarla: docker compose exec db psql -U catalogo -d catalogo
   # ---------------------------------------------------------------------------
   db:
     build: ./db
@@ -23,9 +26,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-catalogo}
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      # Solo escucha en la máquina local, útil para inspeccionar con un cliente SQL.
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
     healthcheck:
       # -h 127.0.0.1 consulta por TCP a propósito: durante la inicialización, Postgres
       # corre un servidor temporal que solo escucha por socket Unix. Sin -h, la base
@@ -39,10 +39,14 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Seed: job de ejecución única. Espera a que la BD esté sana, carga los datos
-  # base (db/seed/seed.sql, idempotente) y termina.
+  # Seed: job de ejecución única, a pedido, del perfil "seed". docker compose up
+  # NO lo ejecuta. Se lanza con: docker compose run --rm seed
+  # Eso levanta db si hace falta, espera a que esté sana, carga los datos base
+  # (db/seed/seed.sql, idempotente) y elimina el contenedor al terminar.
+  # Nombrar "seed" en cualquier comando de Compose activa su perfil.
   # ---------------------------------------------------------------------------
   seed:
+    profiles: ["seed"]
     image: postgres:17-alpine
     depends_on:
       db:
@@ -60,6 +64,9 @@ services:
   # ---------------------------------------------------------------------------
   # API REST. Requiere backend/Dockerfile (lo aporta quien desarrolle el backend).
   # Contrato: docs/api/openapi.yaml. Escucha en el puerto 8080 del contenedor.
+  # Se publica en la máquina para probar el backend solo (p. ej. GET /health);
+  # la interfaz no lo necesita, porque le llega a través del proxy de web.
+  # DB_PORT es fijo: es el puerto de db dentro de la red interna.
   # ---------------------------------------------------------------------------
   api:
     build: ./backend
@@ -74,23 +81,18 @@ services:
       DB_USER: ${POSTGRES_USER:-catalogo}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
       MAX_BATCH_SIZE: ${MAX_BATCH_SIZE:-100}
-      CORS_ORIGIN: http://localhost:${WEB_PORT:-3000}
     ports:
       - "${API_PORT:-8080}:8080"
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
   # Frontend. Requiere frontend/Dockerfile (lo aporta quien desarrolle el front).
-  # Sirve la interfaz en el puerto 80 del contenedor. El navegador llama a la
-  # API usando API_BASE_URL.
+  # Su nginx sirve la interfaz en el puerto 80 del contenedor y reenvía /api/ a
+  # http://api:8080 (proxy inverso). El navegador solo habla con localhost:3000,
+  # con rutas relativas (/api/v1/...), así que no hace falta CORS.
   # ---------------------------------------------------------------------------
   web:
-    build:
-      context: ./frontend
-      args:
-        API_BASE_URL: http://localhost:${API_PORT:-8080}
-    environment:
-      API_BASE_URL: http://localhost:${API_PORT:-8080}
+    build: ./frontend
     depends_on:
       - api
     ports:

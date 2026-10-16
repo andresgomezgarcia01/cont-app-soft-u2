@@ -9,22 +9,22 @@ Los endpoints y sus formatos están en [`docs/api/openapi.yaml`](../docs/api/ope
 | Método y ruta | Éxito | Qué hace |
 |---|---|---|
 | `GET /health` | 200 | `200` si la API puede consultar la base de datos, `503` si no |
-| `GET /api/v1/aplicaciones` | 200 | Lista con datos básicos y `total_despliegues`. Filtros: `origen`, `modalidad`, `activa`, `q` |
+| `GET /api/v1/aplicaciones` | 200 | Lista con datos básicos y `total_despliegues`. Búsqueda por nombre con `q` |
 | `POST /api/v1/aplicaciones` | 201 | Crea una aplicación |
 | `POST /api/v1/aplicaciones/lote` | 201 | Carga masiva, todo o nada |
 | `GET /api/v1/aplicaciones/{id}` | 200 | Detalle con sus despliegues (JOIN) |
-| `PUT /api/v1/aplicaciones/{id}` | 200 | Reemplaza los datos de una aplicación |
-| `DELETE /api/v1/aplicaciones/{id}` | 204 | Elimina la aplicación y, en cascada, sus despliegues |
 | `GET /api/v1/aplicaciones/{id}/despliegues` | 200 | Lista los despliegues de una aplicación |
-| `POST /api/v1/aplicaciones/{id}/despliegues` | 201 | Crea un despliegue |
-| `PUT /api/v1/despliegues/{id}` | 200 | Reemplaza los datos de un despliegue |
-| `DELETE /api/v1/despliegues/{id}` | 204 | Elimina un despliegue |
+| `POST /api/v1/aplicaciones/{id}/despliegues` | 201 | Crea un despliegue (como máximo uno por ambiente) |
 
-**Prioridad si el tiempo aprieta:** primero `health`, listar, detalle y crear (individual y masiva). Editar y eliminar después.
+La base es **crear y consultar**. Editar y eliminar quedan como incremento, si el grupo lo decide ([pendientes.md](../docs/pendientes.md), #11).
+
+Un despliegue es el **estado actual** de una aplicación en un ambiente: hay como máximo uno por aplicación y ambiente (de 0 a 3), sin historial ([ADR-0004](../docs/adr/0004-modelo-de-datos-del-catalogo.md)). Por ahora un despliegue se crea y no se edita.
+
+**Prioridad si el tiempo aprieta:** primero `health`, listar, detalle y crear (individual y masiva).
 
 ## Errores
 
-Todos los errores usan el formato de [`docs/errores.md`](../docs/errores.md): mismos códigos, mismo JSON, incluidos los de rutas inexistentes y los inesperados. Allí están las reglas de negocio (R1, R2 y R3), el orden de validación y la traducción de errores de la base de datos.
+Todos los errores usan el formato de [`docs/errores.md`](../docs/errores.md): mismos códigos, mismo JSON, incluidos los de rutas inexistentes y los inesperados. Allí están las reglas de negocio (R1 y R2), el orden de validación (incluido el de la carga masiva) y la traducción de errores de la base de datos, que distingue qué restricción `UNIQUE` falló.
 
 ## Arquitectura interna
 
@@ -47,10 +47,9 @@ Hay que entregar un `backend/Dockerfile`. Con cualquier lenguaje deben cumplirse
 |---|---|---|
 | `PORT` | `8080` | Puerto de escucha |
 | `DB_HOST` | `db` | Nombre del servicio de la base de datos |
-| `DB_PORT` | `5432` | Puerto de PostgreSQL |
+| `DB_PORT` | `5432` | Puerto de PostgreSQL dentro de la red de Compose (fijo) |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD` | `catalogo`, `catalogo`, `catalogo_dev` | Credenciales de desarrollo |
 | `MAX_BATCH_SIZE` | `100` | Tope de aplicaciones por carga masiva |
-| `CORS_ORIGIN` | `http://localhost:3000` | Origen del frontend permitido. Sin CORS el navegador bloquea las llamadas |
 
 ## Criterios de aceptación
 
@@ -58,6 +57,8 @@ Hay que entregar un `backend/Dockerfile`. Con cualquier lenguaje deben cumplirse
 - [ ] `GET /health` responde `200`; con la base de datos detenida, `503`.
 - [ ] Todos los endpoints cumplen el OpenAPI, y los errores cumplen `errores.md`.
 - [ ] La carga masiva es todo o nada, con `indice` en el error, y respeta `MAX_BATCH_SIZE`.
-- [ ] Las reglas R1, R2 y R3 devuelven `422` (incluida R3 al cambiar el origen de una aplicación).
-- [ ] Un nombre duplicado devuelve `409`.
+- [ ] La carga masiva valida elemento por elemento, en orden: el primer error corta, se hace `ROLLBACK` y se reporta su `indice`.
+- [ ] Las reglas R1 y R2 devuelven `422`.
+- [ ] Un nombre duplicado devuelve `409` con `campo: nombre`; en un lote, en el `indice` de la segunda aparición.
+- [ ] Un ambiente repetido para la misma aplicación devuelve `409` con `campo: ambiente`: al crear un despliegue y en la carga masiva (también si se repite dentro de una misma aplicación del lote).
 - [ ] Ninguna respuesta expone trazas ni mensajes internos de la base de datos.

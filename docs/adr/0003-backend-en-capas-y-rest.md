@@ -24,5 +24,5 @@ La tabla de responsabilidades por capa está en [arquitectura.md](../arquitectur
 ## Consecuencias
 
 - Frontend y backend pueden avanzar en paralelo, cada uno contra el contrato.
-- Las reglas que involucran dos tablas (por ejemplo, `SAAS` solo para aplicaciones `PROVEEDOR`) no caben en un `CHECK`, así que se implementan en el servicio y se prueban allí.
+- Las reglas de negocio se implementan en el servicio y se prueban allí, aunque la base de datos también tenga su `CHECK`.
 - Hay más archivos que en un diseño plano. Es el costo de que la arquitectura sea visible.

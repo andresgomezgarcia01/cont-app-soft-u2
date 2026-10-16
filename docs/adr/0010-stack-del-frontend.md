@@ -11,8 +11,8 @@ La interfaz consume la API definida en [`openapi.yaml`](../api/openapi.yaml). La
 
 - **Dominio del equipo:** igual que en el backend, gana lo que ya se maneje.
 - **Imagen liviana:** que el resultado sea archivos estáticos servibles desde un contenedor pequeño en el puerto 80.
-- **Configuración de la URL de la API:** poder cambiarla sin editar código (`API_BASE_URL`).
-- **Formularios y tablas:** que haga razonablemente fácil el manejo de formularios con validación y de listas con filtros.
+- **Servible por nginx:** que el resultado sean archivos estáticos que nginx pueda servir, con llamadas relativas a `/api/` ([ADR-0011](0011-interfaz-reenvia-llamadas-a-la-api.md)).
+- **Formularios y tablas:** que haga razonablemente fácil el manejo de formularios con validación y de listas con búsqueda.
 
 ## Decisión
 

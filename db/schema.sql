@@ -29,7 +29,9 @@ COMMENT ON COLUMN aplicacion.origen IS 'PROPIA: desarrollada internamente. PROVE
 
 -- ----------------------------------------------------------------------------
 -- despliegue (8 columnas)
--- Dónde y en qué versión está desplegada una aplicación, por ambiente.
+-- Despliegue vigente de una aplicación en un ambiente: la versión que HOY está
+-- en ese ambiente, dónde y desde cuándo. Uno por ambiente como máximo (de 0 a 3
+-- por aplicación). No se guarda historial.
 -- ----------------------------------------------------------------------------
 CREATE TABLE despliegue (
     id             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -45,6 +47,9 @@ CREATE TABLE despliegue (
     CONSTRAINT fk_despliegue_aplicacion
         FOREIGN KEY (aplicacion_id) REFERENCES aplicacion (id) ON DELETE CASCADE,
 
+    -- Como máximo un despliegue por aplicación y ambiente (estado actual).
+    CONSTRAINT uq_despliegue_aplicacion_ambiente UNIQUE (aplicacion_id, ambiente),
+
     CONSTRAINT ck_despliegue_ambiente
         CHECK (ambiente IN ('DEV', 'QA', 'PROD')),
     CONSTRAINT ck_despliegue_modalidad
@@ -57,13 +62,10 @@ CREATE TABLE despliegue (
         CHECK ((modalidad = 'NUBE') = (proveedor_nube IS NOT NULL))
 );
 
-COMMENT ON TABLE  despliegue           IS 'Despliegues de una aplicación, por ambiente';
+COMMENT ON TABLE  despliegue           IS 'Despliegue vigente de una aplicación por ambiente (uno por ambiente)';
 COMMENT ON COLUMN despliegue.modalidad IS 'ON_PREMISE, NUBE o SAAS';
 COMMENT ON COLUMN despliegue.ubicacion IS 'Región de la nube o datacenter (opcional)';
 
--- Acelera listar los despliegues de una aplicación y el JOIN del detalle.
-CREATE INDEX ix_despliegue_aplicacion_id ON despliegue (aplicacion_id);
-
--- Nota: la regla "una aplicación SAAS debe ser de origen PROVEEDOR" involucra
--- dos tablas, por eso NO se implementa aquí sino en la capa de servicio de la
--- API (ver docs/errores.md y ADR-0003).
+-- No hace falta un índice aparte sobre aplicacion_id: el índice único de
+-- uq_despliegue_aplicacion_ambiente empieza por esa columna, así que ya acelera
+-- listar los despliegues de una aplicación y el JOIN del detalle.

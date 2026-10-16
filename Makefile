@@ -3,16 +3,19 @@
 # Uso: make <objetivo>        Lista de objetivos: make help
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-db build down reset ps logs db-shell health
+.PHONY: help up up-db seed build down reset ps logs db-shell health
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
 
-up: ## Construye y levanta todo (db, seed, api, web)
+up: ## Construye y levanta db, api y web (sin datos base)
 	docker compose up -d --build
 
-up-db: ## Levanta solo la base de datos y carga los datos base
-	docker compose up -d --build db seed
+up-db: ## Levanta solo la base de datos (sin datos base)
+	docker compose up -d --build db
+
+seed: ## Carga los datos base a propósito (se puede repetir)
+	docker compose run --rm seed
 
 build: ## Construye las imágenes sin levantar nada
 	docker compose build
@@ -20,7 +23,7 @@ build: ## Construye las imágenes sin levantar nada
 down: ## Apaga los contenedores y conserva los datos
 	docker compose down
 
-reset: ## Apaga y BORRA los datos (el esquema y el seed se recargan al subir)
+reset: ## Apaga y BORRA los datos (al subir, el esquema se recrea vacío)
 	docker compose down -v
 
 ps: ## Estado de los servicios

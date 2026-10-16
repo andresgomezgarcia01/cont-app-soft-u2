@@ -16,7 +16,9 @@ Un **catálogo de aplicaciones** con dos tablas:
 
 Criterios que guiaron el diseño:
 
-- Una aplicación tiene de 0 a N despliegues. Una misma aplicación puede estar, por ejemplo, en `DEV` on-premise y en `PROD` en la nube.
+- Las "7 columnas por tabla" del enunciado se toman como un **mínimo** (decisión del grupo): por eso `despliegue` tiene 8.
+- La relación es 1 a N: una aplicación puede tener varios despliegues. Una misma aplicación puede estar, por ejemplo, en `DEV` on-premise y en `PROD` en la nube.
+- **Un despliegue es el estado actual**: la versión que hoy está en un ambiente. Hay como máximo un despliegue por aplicación y ambiente, es decir, de 0 a 3 por aplicación (restricción `uq_despliegue_aplicacion_ambiente UNIQUE (aplicacion_id, ambiente)`). No se guarda historial: `desplegado_en` indica desde cuándo está esa versión en ese ambiente.
 - `origen` (propia o de proveedor) describe a la aplicación; `modalidad` (on-premise, nube o SaaS) describe un despliegue concreto. Por eso viven en tablas distintas.
 - Al eliminar una aplicación se eliminan sus despliegues (`ON DELETE CASCADE`).
 - El nombre de la aplicación es único.
@@ -28,8 +30,10 @@ Criterios que guiaron el diseño:
 - **Inventario de productos y stock.** Funcionaba igual, pero el catálogo de aplicaciones encaja mejor con el tema del módulo: modela justamente lo que se está desplegando.
 - **Ventas (usuario, producto, compra).** Exige tres tablas o más y más desarrollo del que permite el tiempo.
 - **Una sola tabla.** No cumple el requisito de dos tablas con relación.
+- **Despliegue como historial** (varias filas por aplicación y ambiente, una por versión). Permite ver la evolución, pero obliga a decidir cuál es la vigente y complica la interfaz. El estado actual alcanza para mostrar la relación entre tablas.
 
 ## Consecuencias
 
-- La regla "una aplicación `SAAS` debe ser de origen `PROVEEDOR`" cruza dos tablas, por lo que se implementa en el servicio ([errores.md](../errores.md)).
-- Entre ambas tablas suman 15 columnas, con tipos variados. Hay que confirmar con el tutor si "7 columnas" es exacto o un mínimo, y cómo se cuentan los "15 datos" ([pendientes.md](../pendientes.md)).
+- Un ambiente repetido para la misma aplicación devuelve `409` ([errores.md](../errores.md)). Por ahora un despliegue se crea y no se edita. Pasar a otra versión editando el despliegue de ese ambiente queda para el incremento de CRUD completo, si el grupo lo decide ([pendientes.md](../pendientes.md), #11).
+- Entre ambas tablas suman 15 columnas, con tipos variados.
+- Los "15 datos" de la rúbrica se cumplen con **al menos 15 aplicaciones**, cada una con sus despliegues, ingresadas durante el video.
