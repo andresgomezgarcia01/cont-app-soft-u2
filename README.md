@@ -210,7 +210,7 @@ cont-app-soft-u2/
 |---|---|
 | Aplicación (`app/`) | Esqueleto mínimo: un solo archivo (`src/index.js`) que arranca, responde `/health` y cierra ordenadamente, con su `Dockerfile`. Falta todo el desarrollo: las capas, las páginas, los formularios, el manejo de errores y la carga del CSV ([app/README.md](app/README.md)). |
 | Base de datos (`schema.sql`, `seed.sql`, `db/Dockerfile`) | Verificada en Docker con `postgres:17-alpine`: crea las tablas en el primer arranque, `db` queda *healthy*, el seed a pedido es idempotente, las restricciones rechazan los datos inválidos y los datos sobreviven a `down` y `up`. |
-| `docker-compose.yml` | Cambió: servicio `app`, red `catalogo-red` y el 5432 publicado en `127.0.0.1`. Falta verificar en Docker el servicio `app` y la red nueva. |
+| `docker-compose.yml` | Verificado en Docker: `db` y `app` *healthy*, `/health` responde (y da `503` si la base se detiene), red `catalogo-red`, la base en `127.0.0.1:5432` y la aplicación en el 3000, seed a pedido, persistencia con `down`/`up`, apagado ordenado de `app` y los 36 comandos del guion. Falta la carga del CSV y la demostración en el navegador, que dependen de la aplicación. |
 | Video | Pendiente |
 
 ## Reglas del equipo
