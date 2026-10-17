@@ -50,6 +50,8 @@ flowchart LR
 
 `db` declara un `healthcheck` con `pg_isready`, consultando por TCP a propósito (ver [ADR-0007](adr/0007-arranque-ordenado-y-seed.md)). Compose no arranca `app` hasta que la base de datos responde, así que **la aplicación no necesita lógica de reintentos al arrancar**. Si la base de datos se cae con la aplicación ya en ejecución, la aplicación responde `503` con su página de error (ver [errores.md](errores.md)).
 
+`app` también declara un `healthcheck`, que consulta su propio `/health`: aparece *healthy* cuando la aplicación responde y llega a la base, y *unhealthy* si la base no está disponible. Ningún servicio depende de él; sirve para ver el estado real en `docker compose ps` y para que `docker compose up --wait` espere a que la aplicación atienda.
+
 `seed` pertenece al perfil `seed`: `docker compose up` **no** lo ejecuta. Se lanza a pedido con `docker compose run --rm seed`, que levanta `db` si hace falta y espera la misma condición `service_healthy`. `app` no depende de él.
 
 ## 4. Capas de la aplicación

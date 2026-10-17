@@ -1,6 +1,6 @@
 # Guion de comandos Docker para el video
 
-La rúbrica pide **al menos 30 comandos Docker en la consola, mostrando la instalación**, y para la nota máxima, **explicando su arquitectura y sus usos**. Este guion tiene **35 comandos**, en el orden en que se ejecutan en el video, y todos se usan. Algunos se repiten con otras opciones (`docker run`, `docker rm`, `docker compose up` y `docker compose down`): contando cada uno una sola vez, son **30 comandos distintos**.
+La rúbrica pide **al menos 30 comandos Docker en la consola, mostrando la instalación**, y para la nota máxima, **explicando su arquitectura y sus usos**. Este guion tiene **36 comandos**, en el orden en que se ejecutan en el video, y todos se usan. Algunos se repiten, iguales o con otras opciones (`docker run`, `docker rm`, `docker compose up` y `docker compose down`): contando cada uno una sola vez, son **31 comandos distintos**.
 
 Al ejecutar cada comando se dice qué hace y qué componente de Docker interviene. Este es el mapa:
 
@@ -71,7 +71,7 @@ Es el ciclo de vida de la lectura de la Unidad 2: creado, en ejecución, detenid
 | 22 | `docker network create red-demo` | Crea una red. En ella los contenedores se encuentran por nombre | Red |
 | 23 | `docker network ls` | Lista las redes: las que trae Docker (`bridge`, `host`, `none`) y `red-demo` | Red |
 | 24 | `docker volume create datos-demo` | Crea un volumen nombrado, gestionado por Docker | Volumen |
-| 25 | `docker volume ls` | Lista los volúmenes | Volumen |
+| 25 | `docker volume ls` | Lista los volúmenes. Además de `datos-demo` aparecen dos con un nombre largo de letras y números: son **volúmenes anónimos**. La imagen de PostgreSQL declara que guarda sus datos en un volumen, así que Docker creó uno sin nombre para `db-demo` y otro para `db-demo2`, y `docker rm` no los borra. Contrastar con `datos-demo`: tiene nombre, se crea a propósito y se reutiliza (comando 26) | Volumen |
 | 26 | `docker run -d --name db-demo3 --network red-demo -v datos-demo:/var/lib/postgresql/data -e POSTGRES_PASSWORD=demo catalogo-db:1.0` | Contenedor conectado a `red-demo` y con los datos de PostgreSQL en el volumen `datos-demo`. Es la base de la demostración de persistencia | Contenedor, red, volumen |
 
 **Demostración de persistencia con el comando 26** (sirve para el criterio de Pruebas):
@@ -98,7 +98,7 @@ Antes de los comandos, se abre [`docker-compose.yml`](../docker-compose.yml) y s
 | Servicio `app` | La aplicación del catálogo. Se construye desde `app/` como la imagen `catalogo-app:1.0`. **La imagen de `app` es el servidor web**: Node.js atiende HTTP en el puerto 3000 y arma las páginas | `docker build` y `docker run` |
 | `environment` con `${VARIABLE:-valor}` | Variables de entorno con un valor por defecto. Se cambian sin tocar el archivo, copiando `.env.example` a `.env`. En `app`, `DB_HOST: db` es el nombre del servicio de la base | `-e` (10, 15, 26) |
 | `ports` | `app` publica `3000:3000`, para abrir `http://localhost:3000`. `db` publica `127.0.0.1:5432:5432`, **solo para desarrollo**: así quien programa la aplicación sin contenedor llega a la base, y solo desde la propia máquina | `-p` (15) |
-| `healthcheck` en `db` | Cada 5 s pregunta con `pg_isready` si la base responde. Cuando responde, `db` queda *healthy* (sana) | — |
+| `healthcheck` en `db` y `app` | Cada 5 s, Compose pregunta si el servicio responde: en `db`, con `pg_isready`; en `app`, consultando `/health`. Cuando responde, queda *healthy* (sano) | `--health-cmd` de `docker run` |
 | `depends_on` con `service_healthy` | Orden de arranque: `app` (y `seed`) no arrancan hasta que `db` está sana | El orden en que se escriben los `docker run` |
 | Volumen `db_data` | Donde PostgreSQL guarda los datos, fuera del contenedor. Sobrevive a `docker compose down` y solo se borra con `down -v` | `docker volume create` (24) y `-v` (26) |
 | Red `catalogo-red` | Red privada del proyecto, con nombre explícito. Dentro de ella `app` encuentra a la base por el nombre `db` | `docker network create` (22) y `--network` (26) |
@@ -109,10 +109,11 @@ Antes de los comandos, se abre [`docker-compose.yml`](../docker-compose.yml) y s
 | # | Comando | Qué hace y qué decir | Componente |
 |---|---|---|---|
 | 27 | `docker compose config` | Valida el archivo y lo muestra con las variables ya resueltas, incluidas las de `.env` si existe | Compose |
-| 28 | `docker compose up -d --build` | Construye las imágenes de `db` y `app`, crea la red `catalogo-red` y el volumen, y levanta los servicios en el orden de `depends_on`: primero `db`, y `app` cuando `db` está sana | Compose, imagen, red, volumen, contenedor |
-| 29 | `docker compose ps` | Estado de los servicios: `db` aparece *healthy* y con el puerto `127.0.0.1:5432->5432/tcp`; `app`, con `3000->3000/tcp`. `seed` no aparece: no forma parte del arranque. Con el puerto a la vista, se abre `http://localhost:3000` en el navegador | Compose, contenedor |
-| 30 | `docker network inspect catalogo-red` | Muestra la red con nombre propio que define el Compose y los contenedores conectados a ella, `db` y `app` (`catalogo-apps-db-1` y `catalogo-apps-app-1`), cada uno con su IP interna. Dentro de esa red no hacen falta las IP: los contenedores se encuentran por el nombre del servicio, y por eso `app` llega a la base con `DB_HOST: db` | Red |
-| 31 | `docker compose logs -f` | Los logs de todos los servicios, en vivo. En `db` se ve la creación de las tablas (`01-schema.sql`) y luego "ready to accept connections"; en `app`, el mensaje de que escucha en el puerto 3000. `Ctrl+C` deja de seguirlos, pero los contenedores siguen funcionando | Compose, contenedor |
+| 28 | `docker compose build` | Construye las imágenes propias de los servicios, cada una desde su `Dockerfile`: `catalogo-db:1.0` y **`catalogo-app:1.0`, la imagen del servidor web**. Para la de `app` descarga `node:24-alpine`, instala las dependencias y copia el código. Equivale a un `docker build` por servicio (como el comando 8) | Compose, imagen |
+| 29 | `docker compose up -d` | Crea la red `catalogo-red` y el volumen, y levanta los servicios en el orden de `depends_on`: primero `db`, y `app` cuando `db` está sana | Compose, red, volumen, contenedor |
+| 30 | `docker compose ps` | Estado de los servicios: `db` aparece *healthy* y con el puerto `127.0.0.1:5432->5432/tcp`; `app`, con `3000->3000/tcp` y también *healthy*: responde y llega a la base (los primeros segundos puede verse `health: starting`). `seed` no aparece: no forma parte del arranque. Con el puerto a la vista, se abre `http://localhost:3000` en el navegador | Compose, contenedor |
+| 31 | `docker network inspect catalogo-red` | Muestra la red con nombre propio que define el Compose y los contenedores conectados a ella, `db` y `app` (`catalogo-apps-db-1` y `catalogo-apps-app-1`), cada uno con su IP interna. Dentro de esa red no hacen falta las IP: los contenedores se encuentran por el nombre del servicio, y por eso `app` llega a la base con `DB_HOST: db` | Red |
+| 32 | `docker compose logs -f` | Los logs de todos los servicios, en vivo. En `db` se ve la creación de las tablas (`01-schema.sql`) y luego "ready to accept connections"; en `app`, el mensaje de que escucha en el puerto 3000. `Ctrl+C` deja de seguirlos, pero los contenedores siguen funcionando | Compose, contenedor |
 
 ### Demostración en el navegador
 
@@ -130,10 +131,10 @@ El formato del archivo está en [`docs/datos/plantilla.csv`](datos/plantilla.csv
 
 | # | Comando | Qué hace y qué decir | Componente |
 |---|---|---|---|
-| 32 | `docker compose exec db psql -U catalogo -d catalogo -c "SELECT count(*) FROM aplicacion;"` | Consulta directa a la base de datos, sin pasar por la aplicación: los datos ingresados en el navegador están guardados en `db` | Compose, contenedor |
-| 33 | `docker compose down` | Elimina los contenedores y la red, y **conserva el volumen** `db_data` | Compose, contenedor, red |
-| 34 | `docker compose up -d` | Vuelve a levantar la aplicación completa: crea de nuevo la red y los contenedores, y `db` usa el mismo volumen. Se abre `http://localhost:3000` (o se repite la consulta del comando 32) y las aplicaciones cargadas siguen ahí: **los datos sobrevivieron a `down`** porque el volumen no se borró | Compose, contenedor, red, volumen |
-| 35 | `docker compose down -v` | Elimina los contenedores, la red y también el volumen: ahora sí se borran los datos | Compose, volumen |
+| 33 | `docker compose exec db psql -U catalogo -d catalogo -c "SELECT count(*) FROM aplicacion;"` | Consulta directa a la base de datos, sin pasar por la aplicación: los datos ingresados en el navegador están guardados en `db` | Compose, contenedor |
+| 34 | `docker compose down` | Elimina los contenedores y la red, y **conserva el volumen** `db_data` | Compose, contenedor, red |
+| 35 | `docker compose up -d` | Vuelve a levantar la aplicación completa: crea de nuevo la red y los contenedores, y `db` usa el mismo volumen. Se abre `http://localhost:3000` (o se repite la consulta del comando 33) y las aplicaciones cargadas siguen ahí: **los datos sobrevivieron a `down`** porque el volumen no se borró | Compose, contenedor, red, volumen |
+| 36 | `docker compose down -v` | Elimina los contenedores, la red y también el volumen: ahora sí se borran los datos | Compose, volumen |
 
 ## Dos formas de hacer lo mismo
 
@@ -164,9 +165,10 @@ Mostrar las dos vías ayuda a "diferenciar usos". Con Compose, los contenedores 
    docker network rm red-demo
    docker volume rm datos-demo
    docker compose down -v
-   docker rmi hello-world
+   docker volume prune -f
+   docker rmi hello-world catalogo-app:1.0 catalogo-db:1.0 catalogo-db:latest postgres:17-alpine node:24-alpine
    ```
 
-   Los errores del tipo "No such container" significan que ya no existía y se pueden ignorar. Quitar `hello-world` hace que el comando 4 muestre la descarga desde el registry.
+   Los errores del tipo "No such container" o "No such image" significan que ya no existía y se pueden ignorar. `docker volume prune -f` borra los volúmenes anónimos que dejaron los ensayos (comando 25); no toca los que tienen nombre. Quitar las imágenes hace que el comando 4 y el 5 muestren la descarga desde el registry, y que los comandos 8 y 28 construyan las imágenes propias desde cero. Hay que quitar también `catalogo-db` y `catalogo-app`, porque están construidas sobre `postgres` y `node`.
 5. **Esperar a la base de datos.** Con el volumen vacío, la imagen de PostgreSQL ejecuta `initdb` y los scripts del esquema con un servidor temporal, y luego arranca el definitivo. Por eso "ready to accept connections" aparece dos veces en `docker logs`: la que vale es la que sigue a "PostgreSQL init process complete". Consultar o insertar antes puede fallar o dar un resultado incompleto. Compose no tiene este problema porque espera al `healthcheck`.
 6. **Datos base a pedido.** `docker compose run --rm seed` carga unas aplicaciones de ejemplo. No forma parte del guion. Si se cargaron antes de grabar, sus aplicaciones aparecen en la lista y no cuentan para las 15 del video, así que conviene grabar partiendo de `docker compose down -v`.

@@ -11,6 +11,7 @@ PostgreSQL tarda unos segundos en aceptar conexiones. Si la aplicación arranca 
 
 - `db` declara un **`healthcheck`** con `pg_isready -h 127.0.0.1`, es decir, por TCP. Es deliberado: en el primer arranque, la imagen oficial ejecuta los scripts de `initdb.d` con un servidor temporal que **solo escucha por socket Unix** (`listen_addresses=''`). Un `pg_isready` sin `-h` usaría el socket y daría "sano" antes de tiempo; al consultar por TCP, solo responde cuando arrancó el servidor definitivo.
 - `seed` y `app` usan `depends_on` con `condition: service_healthy`: no arrancan hasta que la base de datos responde.
+- `app` declara su propio `healthcheck`, que consulta `/health` con `wget`. Nadie depende de él: muestra en `docker compose ps` si la aplicación responde y llega a la base, y hace que `docker compose up --wait` espere a que atienda (sin él, `--wait` la daba por lista unos 400 ms antes de que Node escuchara).
 - **`seed` es un job a pedido**: pertenece al perfil `seed` (`profiles: ["seed"]`), así que `docker compose up` **no** lo ejecuta. Se carga con `docker compose run --rm seed`, que levanta `db` si hace falta, espera a que esté sana, ejecuta `db/seed/seed.sql` y borra el contenedor.
 - Nombrar el servicio `seed` en un comando de Compose activa su perfil. Por eso ningún comando del arranque normal lo nombra.
 - El script de seed es **idempotente** (`ON CONFLICT DO NOTHING` sobre `uq_aplicacion_nombre` y `uq_despliegue_aplicacion_ambiente`): ejecutarlo varias veces no duplica datos.
