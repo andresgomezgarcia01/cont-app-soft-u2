@@ -1,23 +1,23 @@
 # ADR-0005: Formato único de errores y mapeo a códigos HTTP
 
 - **Estado:** Propuesto
-- **Fecha:** 2026-10-16
+- **Fecha:** 2026-10-17
 
 ## Contexto
 
-Si cada endpoint o cada integrante inventa sus propios errores, el frontend no puede tratarlos de forma uniforme. Hay que fijar un formato y una tabla de códigos antes de implementar.
+Si cada página o cada acción inventa sus propios errores, el usuario los ve de formas distintas y no hay una manera uniforme de explicarlos ni de probarlos. Hay que fijar una estructura y una tabla de códigos antes de implementar.
+
+La aplicación arma las páginas en el servidor y no expone una API de datos ([ADR-0003](0003-aplicacion-monolitica-en-capas.md)), así que los errores no viajan en JSON: se muestran en la página que corresponde.
 
 ## Decisión
 
-Todos los errores usan la misma forma de JSON y un conjunto pequeño de códigos HTTP:
+Todo error se describe con la misma estructura:
 
-```json
-{
-  "codigo": "REGLA_NEGOCIO",
-  "mensaje": "Si la modalidad es NUBE, proveedor_nube es obligatorio",
-  "detalles": [{ "campo": "proveedor_nube", "motivo": "obligatorio cuando modalidad es NUBE" }]
-}
-```
+- `codigo`: identificador estable, en mayúsculas;
+- `mensaje`: texto legible, apto para mostrarse al usuario;
+- `detalles` (opcional): una lista donde cada elemento puede traer `campo`, `fila` y `motivo`. `fila` solo aplica a la carga de un archivo CSV.
+
+La aplicación **muestra** el error en la página (el formulario con lo que se escribió, la página de carga o una página de error propia) y responde con el código HTTP de esta tabla:
 
 | HTTP | `codigo` |
 |---|---|
@@ -31,18 +31,20 @@ Todos los errores usan la misma forma de JSON y un conjunto pequeño de códigos
 
 Convenciones:
 
-- **400 frente a 422:** 400 cuando la petición está mal formada; 422 cuando está bien formada pero incumple una regla de negocio.
-- `mensaje` es legible y apto para mostrarse al usuario.
-- Un `500` **nunca** expone trazas ni mensajes de la base de datos: el detalle va al log.
+- **400 frente a 422:** 400 cuando lo enviado está mal formado; 422 cuando está bien formado pero incumple una regla de negocio.
+- Un `500` **nunca** muestra trazas ni mensajes de la base de datos: el detalle va al log.
+- La única respuesta en JSON es `GET /health`, que usa esta misma estructura cuando responde `503`.
 
-El detalle completo (por endpoint, reglas y traducción de errores de la base de datos) está en [errores.md](../errores.md).
+El detalle completo (por página, reglas, orden de validación y traducción de errores de la base de datos) está en [errores.md](../errores.md).
 
 ## Alternativas consideradas
 
-- **Usar solo 400 para todo error del cliente.** Más simple, pero pierde la diferencia entre "mal formado" y "regla de negocio".
-- **Problem Details (RFC 9457).** Es el estándar para errores de APIs HTTP y sería una buena evolución. Se descarta por ahora para mantener el formato más corto y fácil de explicar.
+- **Usar solo 400 para todo error del usuario.** Más simple, pero pierde la diferencia entre "mal formado" y "regla de negocio".
+- **Mostrar solo un texto, sin código ni estructura.** Cada página resolvería el error a su manera y no se podría marcar el campo con problema de forma uniforme.
+- **Problem Details (RFC 9457).** Es el estándar para errores de APIs HTTP en JSON. Deja de aplicar: la aplicación no expone una API de datos.
 
 ## Consecuencias
 
-- El frontend puede mostrar `mensaje` y resaltar los campos listados en `detalles` sin conocer cada endpoint.
-- Hay que mantener sincronizados `errores.md` y el esquema `Error` del OpenAPI.
+- Las vistas pueden mostrar `mensaje` y marcar los campos de `detalles` sin conocer cada caso.
+- El código HTTP de cada respuesta refleja el error, así que se puede comprobar desde las herramientas del navegador o con `curl`.
+- Este ADR y [errores.md](../errores.md) deben mantenerse de acuerdo.

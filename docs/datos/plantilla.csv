@@ -1,0 +1,5 @@
+nombre,descripcion,origen,equipo_responsable,activa,version,ambiente,modalidad,proveedor_nube,ubicacion,desplegado_en
+Portal de Proveedores,Portal web para que los proveedores consulten pedidos y pagos,PROPIA,Compras,true,1.0.0,PROD,NUBE,AZURE,brazilsouth,2026-09-15T10:00:00Z
+Portal de Proveedores,Portal web para que los proveedores consulten pedidos y pagos,PROPIA,Compras,true,1.1.0-rc1,QA,NUBE,AZURE,brazilsouth,
+Herramienta de Tickets,,PROVEEDOR,Soporte,true,2026.1,PROD,SAAS,,,
+Inventario Interno,Inventario de equipos de cómputo,PROPIA,Operaciones,false,,,,,,

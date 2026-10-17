@@ -1,9 +1,17 @@
 # Catálogo de aplicaciones: entorno local completo.
 #
-#   docker compose up -d --build        levanta db, api y web (la base queda sin datos)
-#   docker compose up -d --build db     solo la base de datos
-#   docker compose run --rm seed        carga los datos base, a propósito (idempotente)
-#   docker compose down -v              apaga y BORRA los datos (volumen)
+# Este archivo describe los contenedores del proyecto y cómo se conectan:
+#   db    la base de datos PostgreSQL (imagen propia, db/Dockerfile)
+#   seed  un trabajo a pedido que carga datos de ejemplo en la base
+#   app   el servidor web de la aplicación (imagen propia, app/Dockerfile)
+#
+# Comandos principales:
+#   docker compose up -d --build        construye y levanta db y app (la base queda sin datos)
+#   docker compose up -d db             levanta solo la base de datos
+#   docker compose run --rm seed        carga los datos de ejemplo, a propósito (se puede repetir)
+#   docker compose logs -f app          muestra los mensajes de la aplicación en vivo
+#   docker compose down                 apaga y elimina los contenedores (los datos se conservan)
+#   docker compose down -v              apaga y además BORRA los datos (elimina el volumen)
 #
 # Los valores por defecto sirven para desarrollo local. Para cambiarlos, copiar
 # .env.example a .env. No usar estas credenciales fuera de un entorno local.
@@ -12,9 +20,14 @@ name: catalogo-apps
 
 services:
   # ---------------------------------------------------------------------------
-  # Base de datos: imagen propia (db/Dockerfile) basada en PostgreSQL.
-  # Crea las tablas la primera vez que arranca con el volumen vacío.
-  # No publica puertos: solo la alcanzan los otros servicios por la red interna.
+  # db: la base de datos.
+  # Imagen propia, construida desde db/Dockerfile (basada en postgres:17-alpine).
+  # La primera vez que arranca con el volumen vacío, crea las tablas.
+  # Variables: usuario, contraseña y nombre de la base. Tienen valores por
+  # defecto y se cambian en .env.
+  # Puerto: publica el 5432 solo en esta máquina (127.0.0.1), para que quien
+  # desarrolla la aplicación sin contenedor se conecte a localhost:5432.
+  # Si el 5432 está ocupado, se cambia con DB_PORT en .env.
   # Para consultarla: docker compose exec db psql -U catalogo -d catalogo
   # ---------------------------------------------------------------------------
   db:
@@ -24,12 +37,19 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-catalogo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
       POSTGRES_DB: ${POSTGRES_DB:-catalogo}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
+      # Los datos viven en el volumen db_data: sobreviven al borrar el contenedor.
       - db_data:/var/lib/postgresql/data
+    networks:
+      - catalogo-red
     healthcheck:
+      # Compose pregunta cada 5 s si la base responde; cuando responde, la marca
+      # como "healthy" (sana) y recién ahí arrancan los servicios que la esperan.
       # -h 127.0.0.1 consulta por TCP a propósito: durante la inicialización, Postgres
       # corre un servidor temporal que solo escucha por socket Unix. Sin -h, la base
-      # aparecería "sana" antes de tiempo y seed/api arrancarían demasiado pronto.
+      # aparecería "sana" antes de tiempo y seed/app arrancarían demasiado pronto.
       # $$ evita que Compose sustituya la variable: la resuelve el shell del contenedor.
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -39,11 +59,16 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Seed: job de ejecución única, a pedido, del perfil "seed". docker compose up
-  # NO lo ejecuta. Se lanza con: docker compose run --rm seed
-  # Eso levanta db si hace falta, espera a que esté sana, carga los datos base
-  # (db/seed/seed.sql, idempotente) y elimina el contenedor al terminar.
-  # Nombrar "seed" en cualquier comando de Compose activa su perfil.
+  # seed: carga los datos de ejemplo (db/seed/seed.sql). Es un trabajo que se
+  # ejecuta una vez y termina, solo cuando se pide.
+  # Imagen: postgres:17-alpine, la oficial, que trae el cliente psql.
+  # Está en el perfil "seed", así que docker compose up NO lo ejecuta.
+  # Se lanza con: docker compose run --rm seed
+  # Depende de db: la levanta si hace falta y espera a que esté sana.
+  # El script es idempotente (se puede repetir sin duplicar datos), y --rm
+  # elimina el contenedor al terminar.
+  # Variables: los mismos datos de conexión de db, con los mismos valores por defecto.
+  # No publica puertos: habla con db por la red interna.
   # ---------------------------------------------------------------------------
   seed:
     profiles: ["seed"]
@@ -57,52 +82,61 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
       PGDATABASE: ${POSTGRES_DB:-catalogo}
     volumes:
+      # Monta la carpeta db/seed del repositorio, solo lectura.
       - ./db/seed:/seed:ro
+    networks:
+      - catalogo-red
     command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/seed/seed.sql"]
     restart: "no"
 
   # ---------------------------------------------------------------------------
-  # API REST. Requiere backend/Dockerfile: se parte de una de las plantillas de
-  # backend/plantillas/ según el stack elegido (ADR-0009).
-  # Contrato: docs/api/openapi.yaml. Escucha en el puerto 8080 del contenedor.
-  # Se publica en la máquina para probar el backend solo (p. ej. GET /health);
-  # la interfaz no lo necesita, porque le llega a través del proxy de web.
-  # DB_PORT es fijo: es el puerto de db dentro de la red interna.
-  # init: true pone un init mínimo (tini) como proceso 1, que reenvía SIGTERM a
-  # la API. Sin él, Node como proceso 1 ignora SIGTERM y docker stop espera 10 s.
+  # app: la aplicación del catálogo. Es el servidor web de la aplicación
+  # (Node.js atiende HTTP y arma las páginas).
+  # Imagen propia, construida desde app/Dockerfile (basada en node:24-alpine).
+  # Variables: el puerto interno, los datos para conectarse a db y el tope de
+  # filas del archivo CSV. Tienen valores por defecto y se cambian en .env.
+  # DB_HOST es "db": dentro de la red, cada servicio se encuentra por su nombre.
+  # DB_PORT es fijo (5432): es el puerto de db dentro de la red interna.
+  # Puerto: publica el 3000 para abrir la aplicación en http://localhost:3000.
+  # Si el 3000 está ocupado, se cambia con APP_PORT en .env.
+  # Depende de db: no arranca hasta que la base está sana.
+  # init: true pone un proceso init mínimo (tini) como proceso 1, que le pasa a
+  # Node la señal de apagado (SIGTERM). Sin él, docker stop esperaría 10 s.
   # ---------------------------------------------------------------------------
-  api:
-    build: ./backend
+  app:
+    build: ./app
+    image: catalogo-app:1.0
     init: true
     depends_on:
       db:
         condition: service_healthy
     environment:
-      PORT: 8080
+      PORT: 3000
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-catalogo}
       DB_USER: ${POSTGRES_USER:-catalogo}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-catalogo_dev}
-      MAX_BATCH_SIZE: ${MAX_BATCH_SIZE:-100}
+      MAX_FILAS_CSV: ${MAX_FILAS_CSV:-100}
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "${APP_PORT:-3000}:3000"
+    networks:
+      - catalogo-red
     restart: unless-stopped
 
-  # ---------------------------------------------------------------------------
-  # Frontend. frontend/Dockerfile y frontend/nginx.conf ya están; falta la
-  # interfaz (ADR-0010). Su nginx sirve la interfaz en el puerto 80 del
-  # contenedor y reenvía /api/ a http://api:8080 (proxy inverso). El navegador
-  # solo habla con localhost:3000, con rutas relativas (/api/v1/...), así que no
-  # hace falta CORS. Para probarlo sin la API: docker compose up -d --build --no-deps web
-  # ---------------------------------------------------------------------------
-  web:
-    build: ./frontend
-    depends_on:
-      - api
-    ports:
-      - "${WEB_PORT:-3000}:80"
-    restart: unless-stopped
+# -----------------------------------------------------------------------------
+# Red: una red privada para los contenedores del proyecto. Dentro de ella se
+# encuentran por nombre de servicio (app se conecta a "db"). El nombre es
+# explícito para reconocerla en docker network ls.
+# -----------------------------------------------------------------------------
+networks:
+  catalogo-red:
+    name: catalogo-red
 
+# -----------------------------------------------------------------------------
+# Volumen: el espacio donde PostgreSQL guarda los datos, fuera del contenedor.
+# Los datos se conservan aunque el contenedor se borre; solo se pierden con
+# docker compose down -v.
+# -----------------------------------------------------------------------------
 volumes:
   db_data:

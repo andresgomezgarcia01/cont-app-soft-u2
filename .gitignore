@@ -16,11 +16,9 @@
 !/.gitignore
 !/README.md
 !/.env.example
-!/Makefile
 !/docker-compose.yml
 !/db/
-!/backend/
-!/frontend/
+!/app/
 !/docs/
 
 # 3. Defensa en profundidad: aunque un directorio esté re-incluido,

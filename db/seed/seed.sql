@@ -4,11 +4,11 @@
 -- Idempotente: se puede ejecutar varias veces sin duplicar registros.
 -- NO se ejecuta al arrancar el entorno: la base arranca vacía. Se carga a
 -- propósito con el servicio "seed" de docker-compose.yml (perfil "seed"):
---   docker compose run --rm seed      o bien      make seed
+--   docker compose run --rm seed
 --
 -- Carga 4 aplicaciones y 6 despliegues (10 registros), como máximo un
 -- despliegue por aplicación y ambiente. El resto de los datos de la actividad
--- se ingresan desde la aplicación (formulario y carga masiva).
+-- se ingresan desde la aplicación (formulario y carga de un archivo CSV).
 -- Todos los datos son ficticios.
 -- ============================================================================
 

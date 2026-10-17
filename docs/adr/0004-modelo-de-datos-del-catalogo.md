@@ -1,7 +1,7 @@
 # ADR-0004: Modelo de datos: aplicación y despliegue (1 a N)
 
 - **Estado:** Propuesto
-- **Fecha:** 2026-10-16
+- **Fecha:** 2026-10-17
 
 ## Contexto
 
@@ -34,6 +34,6 @@ Criterios que guiaron el diseño:
 
 ## Consecuencias
 
-- Un ambiente repetido para la misma aplicación devuelve `409` ([errores.md](../errores.md)). Por ahora un despliegue se crea y no se edita. Pasar a otra versión editando el despliegue de ese ambiente queda para el incremento de CRUD completo, si el grupo lo decide ([pendientes.md](../pendientes.md), #11).
+- Un ambiente repetido para la misma aplicación da `409`, tanto en el alta de un despliegue como en la carga de un archivo CSV ([errores.md](../errores.md)). El alcance es crear y consultar ([ADR-0003](0003-aplicacion-monolitica-en-capas.md)): un despliegue se crea y no se edita.
 - Entre ambas tablas suman 15 columnas, con tipos variados.
 - Los "15 datos" de la rúbrica se cumplen con **al menos 15 aplicaciones**, cada una con sus despliegues, ingresadas durante el video.
