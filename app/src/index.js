@@ -12,8 +12,11 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'catalogo',
   user: process.env.DB_USER || 'catalogo',
   password: process.env.DB_PASSWORD || 'catalogo_dev',
-  // Si la base no responde en 5 s, la consulta falla en vez de quedar colgada.
+  // Si la base no responde en 5 s, la consulta falla en vez de quedar colgada:
+  // connectionTimeoutMillis limita el tiempo para abrir una conexión nueva y
+  // query_timeout el de cada consulta, también sobre una conexión ya abierta.
   connectionTimeoutMillis: 5000,
+  query_timeout: 5000,
 });
 
 // Un error en una conexión inactiva (por ejemplo, la base se reinicia) se
