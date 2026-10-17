@@ -45,16 +45,16 @@ Los números de comando son los de [comandos.md](comandos.md).
 |---|---|---|
 | Instalación de Docker Desktop y consola | n/a | El proceso de instalación y luego `docker --version` (comando 1) |
 | Crear y eliminar una imagen y un contenedor | Comandos 7 (eliminar la imagen `hello-world`), 8 y 9 (crear y etiquetar la imagen propia), 10 a 14 (crear, arrancar, detener y eliminar un contenedor) y 15, 20 y 21 (ejecutar, matar y eliminar otro) | `docker rmi hello-world`, que borra la imagen de verdad (`Deleted`, no solo `Untagged`), `docker build`, `docker create`/`run` y `docker rm` |
-| Al menos 30 comandos con su arquitectura y usos | [comandos.md](comandos.md): 35 comandos, 30 de ellos distintos | Todos los de la lista, explicando qué hace cada uno y qué componente interviene |
+| Al menos 30 comandos con su arquitectura y usos | [comandos.md](comandos.md): 36 comandos, 31 de ellos distintos | Todos los de la lista, explicando qué hace cada uno y qué componente interviene |
 | Imagen de una base de datos relacional | [`db/Dockerfile`](../db/Dockerfile) | `docker build` (comando 8) y `docker images` |
 | Dos tablas con al menos 7 columnas y tipos variados | [`db/schema.sql`](../db/schema.sql) | `db/schema.sql` en pantalla al construir la imagen, y `\dt` dentro del contenedor (comando 17) |
 | Modelo entidad-relación y dependencia entre tablas | Modelo de datos en [arquitectura.md](arquitectura.md) y la clave foránea de `despliegue` en [`db/schema.sql`](../db/schema.sql) | La clave foránea en `schema.sql` y el detalle de una aplicación con sus despliegues en el navegador |
-| Imagen de un servidor web | [`app/Dockerfile`](../app/Dockerfile). La imagen de `app` es el servidor web de la aplicación: Node.js atiende HTTP en el puerto 3000 | El recorrido por `docker-compose.yml` y `docker compose up -d --build` (comando 28) |
-| Aplicación que se visualiza por web | Servicio `app` en `http://localhost:3000` | El navegador, después de `docker compose ps` (comando 29) |
+| Imagen de un servidor web | [`app/Dockerfile`](../app/Dockerfile). La imagen de `app` es el servidor web de la aplicación: Node.js atiende HTTP en el puerto 3000 | El recorrido por `docker-compose.yml` y `docker compose build` (comando 28), que construye `catalogo-app:1.0` |
+| Aplicación que se visualiza por web | Servicio `app` en `http://localhost:3000` | El navegador, después de `docker compose ps` (comando 30) |
 | Ingreso de 15 datos y guardado en la base de datos | Alta por formulario y carga de un archivo CSV ([ADR-0006](adr/0006-carga-masiva-csv.md)). Los "15 datos" son **al menos 15 aplicaciones**, cada una con sus despliegues | Unas 2 altas por el formulario y un CSV de 15 aplicaciones ([`docs/datos/aplicaciones-video.csv`](datos/aplicaciones-video.csv)) por la carga masiva; mostrar en la lista que hay al menos 15 |
 | Otro enlace que muestre lo que hay en la base de datos | Páginas de lista y de detalle | Navegar de la página de ingreso a la de lista y a un detalle |
-| Sistema independiente y persistente | Servicio `db` con el volumen `db_data` | `docker compose exec db psql ...` (comando 32); la demostración de persistencia con el volumen `datos-demo` (comando 26); `docker compose down` conserva el volumen, `docker compose up -d` vuelve a levantar la aplicación con los datos y `down -v` los borra (comandos 33 a 35) |
-| Todo dentro de contenedores | Servicios `db` y `app` de `docker-compose.yml` | `docker compose ps` (comando 29) y `docker network inspect catalogo-red` (comando 30), con `db` y `app` conectados a la red |
+| Sistema independiente y persistente | Servicio `db` con el volumen `db_data` | `docker compose exec db psql ...` (comando 33); la demostración de persistencia con el volumen `datos-demo` (comando 26); `docker compose down` conserva el volumen, `docker compose up -d` vuelve a levantar la aplicación con los datos y `down -v` los borra (comandos 34 a 36) |
+| Todo dentro de contenedores | Servicios `db` y `app` de `docker-compose.yml` | `docker compose ps` (comando 30) y `docker network inspect catalogo-red` (comando 31), con `db` y `app` conectados a la red |
 | Interfaz con estándares UX/UI | A criterio de quien desarrolla la aplicación | La interfaz durante la demostración en el navegador |
 
 ## 3. Orden sugerido del video
@@ -67,7 +67,7 @@ El enunciado no fija una duración. **Duración: unos 15 minutos**, a unos 15 a 
 4. **Inspección y operación** (fase 4): logs, `exec` con las tablas, `inspect`, `stats`, `kill` y `rm`.
 5. **Redes y volúmenes** (fase 5), con la demostración de persistencia del comando 26.
 6. **Recorrido por `docker-compose.yml`**: servicios `db`, `seed` y `app`, variables y `.env`, puertos, `healthcheck` y `depends_on`, volumen y red, en relación con el diagrama de contenedores.
-7. **Compose en marcha:** `config`, `up -d --build`, `ps`, `network inspect` (la red y sus contenedores) y `logs -f`. La base arranca **vacía**: no se carga el seed.
+7. **Compose en marcha:** `config`, `build` (la imagen del servidor web), `up -d`, `ps`, `network inspect` (la red y sus contenedores) y `logs -f`. La base arranca **vacía**: no se carga el seed.
 8. **La aplicación en el navegador:** lista vacía, unas 2 altas por formulario (con despliegues), la carga del CSV de 15 aplicaciones, la lista con al menos 15 y el detalle con sus despliegues.
 9. **Evidencia independiente y cierre:** consulta directa con `psql`, `docker compose down` (los datos se conservan en el volumen), `docker compose up -d` (la aplicación vuelve con los datos cargados) y `docker compose down -v` (se borran).
 10. **Conclusión:** ventajas de la contenerización vistas en las lecturas (portabilidad, aislamiento, eliminación del problema "funciona en mi máquina", un proceso por contenedor).
@@ -82,11 +82,11 @@ Reparto aproximado de minutos:
 | 4 | 16 a 21 (6) | 1,5 |
 | 5 | 22 a 26 (5), más la demostración de persistencia | 2 |
 | 6 | Sin comandos: el archivo `docker-compose.yml` | 1,5 |
-| 7 | 27 a 31 (5) | 1,5 |
+| 7 | 27 a 32 (6) | 2 |
 | 8 | Sin comandos: la interfaz web | 2 |
-| 9 | 32 a 35 (4), volviendo a abrir la aplicación | 1,5 |
+| 9 | 33 a 36 (4), volviendo a abrir la aplicación | 1,5 |
 | 10 | Sin comandos | 0,5 |
-| **Total** | **35** | **15** |
+| **Total** | **36** | **15,5** |
 
 ## 4. Qué se entrega
 

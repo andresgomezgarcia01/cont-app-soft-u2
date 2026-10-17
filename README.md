@@ -99,7 +99,7 @@ docker compose ps
 
 Construye lo que haya cambiado y levanta `db` y `app`. `app` espera a que la base esté sana antes de arrancar.
 
-**Qué se debería ver:** en `docker compose ps`, `catalogo-apps-db-1` `(healthy)` y `catalogo-apps-app-1` `Up`. Abrir en el navegador:
+**Qué se debería ver:** en `docker compose ps`, `catalogo-apps-db-1` y `catalogo-apps-app-1` `(healthy)` (los primeros segundos, `app` puede mostrar `(health: starting)`). Abrir en el navegador:
 
 - `http://localhost:3000`: la aplicación (mientras no esté desarrollada, responde `Cannot GET /`: es lo esperado);
 - `http://localhost:3000/health`: `{"estado":"ok"}`, que indica que la aplicación llega a la base.

@@ -100,6 +100,9 @@ services:
   # Puerto: publica el 3000 para abrir la aplicación en http://localhost:3000.
   # Si el 3000 está ocupado, se cambia con APP_PORT en .env.
   # Depende de db: no arranca hasta que la base está sana.
+  # healthcheck: Compose consulta /health cada 5 s; app queda "healthy" cuando la
+  # aplicación responde y llega a la base. Así docker compose ps muestra su estado
+  # real y docker compose up --wait espera a que de verdad atienda.
   # init: true pone un proceso init mínimo (tini) como proceso 1, que le pasa a
   # Node la señal de apagado (SIGTERM). Sin él, docker stop esperaría 10 s.
   # ---------------------------------------------------------------------------
@@ -122,6 +125,14 @@ services:
       - "${APP_PORT:-3000}:3000"
     networks:
       - catalogo-red
+    healthcheck:
+      # wget viene en la imagen (node:24-alpine trae BusyBox). Falla si /health
+      # no responde 200, por ejemplo con 503 cuando la base no está disponible.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
 # -----------------------------------------------------------------------------
