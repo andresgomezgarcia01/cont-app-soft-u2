@@ -199,7 +199,7 @@ cont-app-soft-u2/
 | [docs/adr/](docs/adr/README.md) | Decisiones de arquitectura y el porqué de cada una |
 | [app/README.md](app/README.md) | Especificación de la aplicación: páginas, formularios, carga del CSV, capas y cómo desarrollarla |
 | [docs/errores.md](docs/errores.md) | Códigos de error de la aplicación y cómo se muestran |
-| [docs/datos/](docs/datos/) | Archivos CSV de ejemplo: la plantilla y las 15 aplicaciones del video |
+| [docs/datos/](docs/datos/README.md) | Archivos CSV de ejemplo (la plantilla y las 15 aplicaciones del video) y el formato de las columnas |
 | [docs/comandos.md](docs/comandos.md) | Guion de los comandos Docker para el video |
 | [docs/rubrica-y-evidencias.md](docs/rubrica-y-evidencias.md) | Qué evalúa la actividad y qué evidencia entrega cada parte |
 | [docs/pendientes.md](docs/pendientes.md) | Pendientes y decisiones tomadas |
