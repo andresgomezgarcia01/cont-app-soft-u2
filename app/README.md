@@ -42,7 +42,7 @@ El proyecto utiliza una arquitectura monolítica organizada por capas, separando
 Clonar el repositorio y acceder a la carpeta del proyecto:
 
 ```bash
-git clone https://github.com/andresgomezgarcia01/cont-app-soft-u2>
+git clone https://github.com/andresgomezgarcia01/cont-app-soft-u2.git
 cd cont-app-soft-u2
 ```
 
