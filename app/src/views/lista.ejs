@@ -75,7 +75,7 @@
                         <%= aplicacion.activa ? 'Sí' : 'No' %>
                       </td>
                       <td>
-                        <%= aplicacion.fecha_registro %>
+                        <%= new Date(aplicacion.fecha_registro).toLocaleDateString('es-CO', { timeZone: 'UTC' }) %>
                       </td>
                       <td>
                         <%= aplicacion.cantidad_despliegues %>

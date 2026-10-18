@@ -52,7 +52,7 @@
 
             <p>
                 <strong>Fecha de registro:</strong>
-                <%= aplicacion.fecha_registro %>
+                <%= new Date(aplicacion.fecha_registro).toLocaleDateString('es-CO', { timeZone: 'UTC' }) %>
             </p>
 
             <p>
