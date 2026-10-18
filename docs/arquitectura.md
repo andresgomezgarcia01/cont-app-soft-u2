@@ -48,7 +48,7 @@ flowchart LR
 | `seed` (perfil `seed`) | `postgres:17-alpine` | `db` | `service_healthy` |
 | `app` | `catalogo-app:1.0` (propia, sobre `node:24-alpine`) | `db` | `service_healthy` |
 
-`db` declara un `healthcheck` con `pg_isready`, consultando por TCP a propósito (ver [ADR-0007](adr/0007-arranque-ordenado-y-seed.md)). Compose no arranca `app` hasta que la base de datos responde, así que **la aplicación no necesita lógica de reintentos al arrancar**. Si la base de datos se cae con la aplicación ya en ejecución, la aplicación responde `503` con su página de error (ver [errores.md](errores.md)).
+`db` declara un `healthcheck` con `pg_isready`, consultando por TCP a propósito (ver [ADR-0007](adr/0007-arranque-ordenado-y-seed.md)). Compose no arranca `app` hasta que la base de datos responde, así que **la aplicación no necesita lógica de reintentos al arrancar**. Si la base de datos se cae con la aplicación ya en ejecución, las páginas responden `500` con un mensaje amable y `/health` responde `503` (ver [errores.md](errores.md)).
 
 `app` también declara un `healthcheck`, que consulta su propio `/health`: aparece *healthy* cuando la aplicación responde y llega a la base, y *unhealthy* si la base no está disponible. Ningún servicio depende de él; sirve para ver el estado real en `docker compose ps` y para que `docker compose up --wait` espere a que la aplicación atienda.
 
@@ -79,8 +79,8 @@ La responsabilidad de cada capa:
 | Capa | Carpeta | Responsabilidad | No debe |
 |---|---|---|---|
 | Vistas | `app/src/views` | Armar la página HTML con los datos que reciben | Contener reglas de negocio ni SQL |
-| Rutas (controladores) | `app/src/routes` | Recibir la petición, el formulario o el archivo; validar el formato; llamar al servicio; elegir qué página mostrar y con qué código HTTP | Contener reglas de negocio ni SQL |
-| Servicios | `app/src/services` | Reglas de negocio (R1 y R2), orden de las validaciones, transacciones (incluida la carga del CSV) y traducción de los errores de la base de datos | Conocer HTTP ni las vistas |
+| Rutas (controladores) | `app/src/routes` | Recibir la petición, el formulario o el archivo (con `multer`, hasta 2 MB); llamar al servicio; elegir qué página mostrar y con qué código HTTP | Contener validaciones de datos, reglas de negocio ni SQL |
+| Servicios | `app/src/services` | Validaciones (incluidas la lectura y la validación del CSV), reglas de negocio (R1 y R2), orden de las validaciones, transacciones y traducción de los errores de la base de datos | Conocer las vistas |
 | Repositorios | `app/src/repositories` | Consultas SQL y mapeo de filas a objetos | Decidir reglas de negocio |
 | Base de datos | `db/schema.sql` | Última línea de defensa: `CHECK`, `FOREIGN KEY`, `UNIQUE`, `NOT NULL` | Ser la única validación |
 
@@ -88,16 +88,17 @@ La responsabilidad de cada capa:
 
 | Validación | Capa | HTTP (se muestra en la página) |
 |---|---|---|
-| Campo faltante, valor fuera de la lista, texto demasiado largo, id no numérico | Rutas | 400 |
-| Archivo ausente, vacío o que no es CSV; encabezado incorrecto | Rutas | 400 |
-| El archivo trae más filas que `MAX_FILAS_CSV` | Rutas | 413 |
-| Una fila del CSV con un valor inválido | Servicio (la misma validación del alta individual) | 400, con la fila |
-| La aplicación no existe | Servicio | 404 |
-| `NUBE` exige `proveedor_nube`; las demás modalidades no lo admiten | Servicio (y `CHECK` en BD) | 422 |
-| Nombre de aplicación repetido | `UNIQUE` en BD, traducido por el servicio | 409 |
-| Ambiente repetido para la misma aplicación (alta o carga del CSV) | `UNIQUE (aplicacion_id, ambiente)` en BD, traducido por el servicio | 409 |
+| Id no numérico o menor o igual a 0; búsqueda `q` de más de 100 caracteres | Servicios | 400 |
+| Archivo ausente o de más de 2 MB | Rutas (`multer`) | 400 |
+| Archivo vacío o mal formado; encabezado que no tiene exactamente las 11 columnas; fila que no tiene las 11 columnas | Servicios (`lector-csv.js`) | 400 |
+| El archivo trae más filas de datos que `MAX_FILAS_CSV` | Servicios (`lector-csv.js`) | 413 |
+| La aplicación no existe | Servicios | 404 |
+| Campo obligatorio vacío, valor fuera de la lista, texto demasiado largo, fecha inválida (en un formulario o en una fila del CSV) | Servicios (en la carga, `validador-csv.js`) | 422; en la carga, con la fila y la columna |
+| `NUBE` exige `proveedor_nube`; las demás modalidades no lo admiten | Servicios (y `CHECK` en BD) | 422 |
+| Nombre de aplicación repetido | Servicios (buscan el nombre antes de guardar) y `UNIQUE` en BD, traducido por el servicio | 409 |
+| Ambiente repetido para la misma aplicación | Alta: `UNIQUE (aplicacion_id, ambiente)` en BD, traducido por el servicio. Carga: servicios (`validador-csv.js`), antes de guardar | 409 |
 
-Las páginas y los formularios están en las rutas `routes/aplicaciones.js` y `routes/carga.js` y en las vistas de la tabla de archivos de arriba.
+Las rutas no validan los datos: reciben la petición y el archivo, llaman al servicio y eligen la página y el código HTTP con el que se muestra el error. Las páginas y los formularios están en las rutas `routes/aplicaciones.js` y `routes/carga.js` y en las vistas de la tabla de archivos de arriba.
 
 ## 5. Modelo de datos
 
@@ -142,38 +143,42 @@ sequenceDiagram
     participant D as PostgreSQL
 
     N->>Ru: POST /carga con el archivo CSV (formulario multipart)
-    Ru->>Ru: leer el archivo, detectar el separador, validar encabezado y tope de filas
-    Ru->>S: cargar las filas
-    S->>Re: abrir la transaccion
-    Re->>D: BEGIN
-    loop cada fila, en orden
-        S->>S: validar la fila: formato y reglas R1 y R2
-        opt primera fila con ese nombre
-            S->>Re: guardar la aplicacion
+    Ru->>Ru: recibir el archivo (multer, hasta 2 MB)
+    Ru->>S: preparar el archivo
+    S->>S: leer: separador, encabezado, tope de filas y columnas de cada fila
+    S->>S: agrupar las filas por nombre
+    S->>S: validar todo, aplicacion por aplicacion: sus datos y sus despliegues (R1 y R2)
+    alt el archivo tiene un error: el primero corta
+        S-->>Ru: error (con fila y columna cuando aplican)
+        Ru-->>N: 400, 409, 413 o 422, pagina de carga con el error, sin abrir la transaccion
+    else todo es valido
+        Ru->>S: guardar las aplicaciones
+        S->>Re: abrir la transaccion
+        Re->>D: BEGIN
+        loop cada aplicacion
+            S->>Re: buscar el nombre
+            Re->>D: SELECT aplicacion
+            break el nombre ya existe en la base
+                S->>Re: deshacer
+                Re->>D: ROLLBACK
+                S-->>Ru: error con el nombre, sin fila ni columna
+                Ru-->>N: 409, pagina de carga con el error
+            end
+            S->>Re: guardar la aplicacion y sus despliegues
             Re->>D: INSERT INTO aplicacion
-            D-->>Re: id asignado
-        end
-        opt la fila trae un despliegue
-            S->>Re: guardar el despliegue
             Re->>D: INSERT INTO despliegue
         end
-    end
-    alt todas las filas son validas
         S->>Re: confirmar
         Re->>D: COMMIT
         S-->>Ru: resumen: aplicaciones y despliegues creados
-        Ru-->>N: 200, pagina de resumen
-    else error en la fila N: el primer error corta el recorrido
-        S->>Re: deshacer
-        Re->>D: ROLLBACK
-        S-->>Ru: error con codigo, fila y columna
-        Ru-->>N: 400, 409 o 422, pagina de carga con el error
+        Ru-->>N: 200, pagina de carga con el resumen
     end
 ```
 
-- Las filas con el mismo `nombre` son la misma aplicación: se guarda con la primera y las siguientes solo agregan despliegues.
-- **Todo o nada.** Si cualquier fila falla, se hace `ROLLBACK`: no se guarda nada y la página de carga indica la fila (con el encabezado como fila 1) y la columna del primer error. Las filas siguientes no se evalúan.
-- Si el problema es del archivo completo (ausente, vacío, encabezado incorrecto o más filas que `MAX_FILAS_CSV`), las rutas responden `400` o `413` sin abrir la transacción.
+- Las filas con el mismo `nombre` son la misma aplicación: sus datos salen de la primera fila y las siguientes solo agregan despliegues.
+- **Primero se valida todo el archivo y después se guarda.** Las rutas responden `400` si no llega un archivo o supera 2 MB. El servicio lee el archivo (`400` si está vacío, mal formado o con columnas incorrectas; `413` si trae más filas que `MAX_FILAS_CSV`) y valida aplicación por aplicación, en el orden en que aparece cada nombre (`422` por un valor inválido y `409` por un ambiente repetido en el archivo, con la fila y la columna). En todos esos casos se responde sin abrir la transacción.
+- **Todo o nada.** Solo si todo es válido se abre una transacción. Si un nombre ya existe en la base, se responde `409` con el nombre (sin fila ni columna) y se hace `ROLLBACK`: no se guarda nada.
+- Un archivo con solo el encabezado no es un error: termina con 0 aplicaciones y 0 despliegues.
 
 El formato del archivo está en [docs/datos/README.md](datos/README.md) y en el [ADR-0006](adr/0006-carga-masiva-csv.md); el orden de validación, en [errores.md](errores.md#6-orden-de-las-validaciones).
 

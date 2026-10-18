@@ -19,8 +19,8 @@ La aplicación se desarrolla como un único proyecto en Node.js.
 | Capa | Responsabilidad |
 |---|---|
 | Vistas (plantillas) | Arman la página con los datos que reciben. Sin lógica de negocio ni SQL |
-| Rutas / controladores | Reciben la petición, el formulario o el archivo; validan el formato; llaman al servicio y eligen qué página mostrar |
-| Servicios | Reglas de negocio R1 y R2 y transacciones, como la de la carga masiva |
+| Rutas / controladores | Reciben la petición, el formulario o el archivo; llaman al servicio y eligen qué página mostrar y con qué código HTTP |
+| Servicios | Validaciones (incluidas la lectura y validación del CSV), reglas de negocio R1 y R2 y transacciones, como la de la carga masiva |
 | Repositorio | Consultas SQL a PostgreSQL |
 
 - **Alcance:** crear y consultar. No se edita ni se elimina.

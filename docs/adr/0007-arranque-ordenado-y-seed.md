@@ -16,7 +16,7 @@ PostgreSQL tarda unos segundos en aceptar conexiones. Si la aplicación arranca 
 - Nombrar el servicio `seed` en un comando de Compose activa su perfil. Por eso ningún comando del arranque normal lo nombra.
 - El script de seed es **idempotente** (`ON CONFLICT DO NOTHING` sobre `uq_aplicacion_nombre` y `uq_despliegue_aplicacion_ambiente`): ejecutarlo varias veces no duplica datos.
 - `app` **no depende** del seed. Los datos base son útiles en desarrollo, no críticos.
-- Si la base de datos se cae con la aplicación ya en ejecución, la aplicación responde `503` con su página de error ([errores.md](../errores.md)).
+- Si la base de datos se cae con la aplicación ya en ejecución, las páginas muestran un mensaje de error (`500`) y `/health` responde `503`, con lo que `app` aparece *unhealthy* en `docker compose ps` ([errores.md](../errores.md)).
 
 ## Alternativas consideradas
 

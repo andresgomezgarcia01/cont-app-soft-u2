@@ -19,10 +19,11 @@ En el video hay que ingresar al menos 15 aplicaciones, guardarlas en la base de 
 
 - Se aceptan **coma y punto y coma** como separador; se detecta en la primera línea.
 - **Valores vacíos:** `desplegado_en` toma la fecha y hora de la carga; `activa` toma `true`.
-- **Todo o nada, fila por fila y en orden:** el primer error corta, se hace `ROLLBACK`, no se guarda nada y se indica la fila (con el encabezado como fila 1) y la columna.
-- Un `nombre` que ya existe en la base da `409` en su fila. Un ambiente repetido para la misma aplicación da `409` en la fila donde se repite.
-- **Tope configurable** de filas: `MAX_FILAS_CSV`, 100 por defecto. Si se supera, `413`.
-- **Mismas validaciones que el alta individual**, incluidas las reglas R1 y R2, para tener una sola lógica en el servicio.
+- **Todo o nada, validando antes de guardar:** se lee y valida todo el archivo antes de guardar, aplicación por aplicación (en el orden en que aparece cada nombre por primera vez). El primer error corta y se indica la fila (con el encabezado como fila 1) y la columna. Si todo es válido, se guarda en **una sola transacción**; si algo falla al guardar, se hace `ROLLBACK` y no queda nada.
+- Un `nombre` que ya existe en la base da `409` indicando el nombre, sin fila. Un ambiente repetido para la misma aplicación en el archivo da `409` en la fila donde se repite.
+- Un archivo con solo el encabezado no es un error: termina con 0 aplicaciones.
+- **Tope configurable** de filas: `MAX_FILAS_CSV`, 100 por defecto. Si se supera, `413`. Además, el archivo no puede pesar más de 2 MB; si pesa más, `400`.
+- **Las mismas reglas que el alta individual** (obligatorios, valores permitidos, largos, R1 y R2), aplicadas en la capa de servicios (`validador-csv.js`). La fecha sin zona del CSV se toma como UTC ([docs/datos/README.md](../datos/README.md)).
 - El archivo se sube desde una página de la aplicación ([ADR-0003](0003-aplicacion-monolitica-en-capas.md)), y el resultado o el error se muestra en esa misma página ([errores.md](../errores.md)).
 - En `docs/datos/` hay archivos de ejemplo: una plantilla y el CSV de 15 aplicaciones para el video.
 
@@ -36,6 +37,6 @@ En el video hay que ingresar al menos 15 aplicaciones, guardarlas en la base de 
 ## Consecuencias
 
 - La relación 1 a N entre aplicación y despliegues se ve en la carga.
-- Hay que leer y validar un archivo: encabezado, separador, filas y tope.
+- Hay que leer y validar un archivo: tamaño, encabezado, separador, filas y tope.
 - Excel en español guarda los CSV con punto y coma. El riesgo queda cubierto porque se aceptan los dos separadores.
 - En el video se hacen unas 2 altas por formulario y el resto con el CSV de 15 aplicaciones.

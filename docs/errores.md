@@ -1,6 +1,6 @@
 # Errores de la aplicación
 
-La aplicación **clasifica** cada error con un código estable y lo **muestra en la página** que corresponde, con el código HTTP de la respuesta. Este documento fija esos códigos, cuándo se usa cada uno y cómo se muestran. Se apoya en el [ADR-0005](adr/0005-contrato-de-errores.md).
+La aplicación **clasifica** cada error con un código HTTP (y un `codigo` estable que lo nombra) y lo **muestra en la página** que corresponde, como un mensaje de texto. Este documento fija esos códigos, cuándo se usa cada uno y cómo se muestran. Se apoya en el [ADR-0005](adr/0005-contrato-de-errores.md).
 
 La aplicación arma las páginas en el servidor y no expone una API de datos ([ADR-0003](adr/0003-aplicacion-monolitica-en-capas.md)). La única respuesta en JSON es `GET /health` (sección 4).
 
@@ -9,88 +9,82 @@ La aplicación arma las páginas en el servidor y no expone una API de datos ([A
 | Acción | HTTP | Resultado |
 |---|---|---|
 | Abrir una página (lista, detalle, formularios, carga) | 200 | La página |
-| Crear una aplicación (`POST /aplicaciones`) | 302 | Redirige al detalle de la aplicación creada, con una confirmación visible |
-| Crear un despliegue (`POST /aplicaciones/:id/despliegues`) | 302 | Redirige al detalle de la aplicación, con una confirmación visible |
-| Cargar un archivo CSV (`POST /carga`) | 200 | La página de resumen: cuántas aplicaciones y despliegues se crearon |
+| Crear una aplicación (`POST /aplicaciones`) | 302 | Redirige a la lista de aplicaciones, sin aviso |
+| Crear un despliegue (`POST /aplicaciones/:id/despliegues`) | 302 | Redirige al detalle de la aplicación, sin aviso; el despliegue nuevo aparece en la tabla |
+| Cargar un archivo CSV (`POST /carga`) | 200 | La página de carga con el resumen: "Importación completada: N aplicaciones y M despliegues registrados." |
 
 Después de crear se redirige (en lugar de mostrar la página directamente) para que recargar el navegador no vuelva a enviar el formulario.
 
-Una lista vacía **no es un error**: es un `200` con un mensaje como "No hay aplicaciones" o "Ninguna aplicación coincide con la búsqueda".
+Una lista vacía **no es un error**: es un `200` con el mensaje "No se encontraron aplicaciones.". Un archivo CSV con **solo el encabezado** tampoco: la carga termina bien con "0 aplicaciones y 0 despliegues".
 
-`fecha_registro` la asigna la base de datos al crear. `desplegado_en`, si se deja vacío, también: toma la fecha y hora del alta o de la carga.
+`fecha_registro` la asigna la base de datos al crear. `desplegado_en`, si se deja vacío, lo asigna la aplicación con la fecha y hora del alta o de la carga.
 
 ## 2. Cómo se muestra un error
 
-Todo error tiene la misma estructura:
+Cada página muestra el error como **un solo mensaje de texto**, en una alerta: en el alta de aplicación y en la carga, encima del formulario; en la lista, debajo del buscador; en el detalle, dentro del panel de despliegues. En la carga, la alerta agrega "No se importaron los registros. Verifica el archivo e inténtalo nuevamente.". Además:
 
-| Elemento | Obligatorio | Descripción |
-|---|---|---|
-| `codigo` | Sí | Identificador estable en mayúsculas. La aplicación decide con él (qué página y qué código HTTP), no con el texto |
-| `mensaje` | Sí | Texto legible, apto para mostrarse al usuario |
-| `detalles` | No | Lista (puede ir vacía). Cada elemento puede traer `campo`, `fila` y `motivo` |
+- no se muestra el `codigo` ni una lista de detalles, ni se marca el campo con problema;
+- en la carga, la **fila** y la **columna** van dentro del texto del mensaje, por ejemplo: `Fila 5, columna "proveedor_nube": Es obligatorio para modalidad NUBE y debe ser AWS, AZURE, GCP u OTRO.` La fila se cuenta con el encabezado como fila 1: la primera fila de datos es la 2;
+- el formulario de alta de aplicación **conserva lo que el usuario escribió**; el formulario de despliegue, no;
+- la respuesta lleva el **código HTTP** del error (sección 3), no un `200`. La excepción es el alta de despliegue con `409` o `422`, que redirige al detalle (sección 4).
 
-- `campo` es el nombre del campo del formulario (`nombre`, `ambiente`...) o, en la carga, el de la columna del CSV.
-- `fila` solo aplica a la carga de un CSV: es el número de fila del archivo, con el encabezado como fila 1. La primera fila de datos es la 2.
+Los errores que no tienen formulario (id inválido, `404` y los `500` del detalle y del alta de despliegue) se muestran en una **página de error propia** de la aplicación (`views/error.ejs`): el título "Error" con el código HTTP, el mensaje, la navegación y un enlace para volver al catálogo.
 
-En la página:
+**La estructura `codigo`, `mensaje` y `detalles` solo aparece en el JSON de `GET /health`** cuando no llega a la base de datos:
 
-- el `mensaje` se ve arriba, destacado;
-- cada `detalles[].campo` se marca junto a su campo del formulario, con su `motivo`;
-- en la carga, se indican la **fila** y la **columna**;
-- el formulario **conserva lo que el usuario escribió**;
-- el `codigo` puede mostrarse de forma discreta, junto al mensaje;
-- la respuesta lleva el **código HTTP** del error (sección 3), no un `200`.
+| Elemento | Descripción |
+|---|---|
+| `codigo` | Identificador estable en mayúsculas: `SERVICIO_NO_DISPONIBLE` |
+| `mensaje` | Texto legible |
+| `detalles` | Lista, vacía |
 
-Ejemplo: alta de un despliegue en `NUBE` sin proveedor. La respuesta es un `422` con el detalle de la aplicación y su formulario de despliegue:
-
-```text
-+------------------------------------------------------------------+
-| Si la modalidad es NUBE, proveedor_nube es obligatorio           |
-| REGLA_NEGOCIO                                                    |
-+------------------------------------------------------------------+
-Versión          [ 2.0.0          ]
-Ambiente         [ QA           v ]
-Modalidad        [ NUBE         v ]
-Proveedor nube   [ (elegir)     v ]   obligatorio cuando modalidad es NUBE
+```json
+{
+  "codigo": "SERVICIO_NO_DISPONIBLE",
+  "mensaje": "La aplicación no logra conectar con la base de datos",
+  "detalles": []
+}
 ```
-
-Los errores que no tienen formulario (`404`, `500`, `503`) se muestran en una **página de error propia** de la aplicación, con el `mensaje` y un enlace para volver.
 
 ## 3. Códigos de error
 
+La columna `codigo` es la clasificación de cada error. Las páginas no la muestran (solo el mensaje, con el código HTTP de la respuesta); aparece escrita únicamente en el JSON de `/health`.
+
 | HTTP | `codigo` | Cuándo |
 |---|---|---|
-| 400 | `PETICION_INVALIDA` | Campo obligatorio ausente, valor fuera de la lista permitida, texto demasiado largo, fecha inválida, id no numérico, búsqueda `q` de más de 100 caracteres. En la carga: archivo ausente o vacío, archivo que no es `.csv`, encabezado incorrecto (columnas faltantes, sobrantes o con otro nombre), archivo sin filas de datos, o una fila con un valor inválido |
+| 400 | `PETICION_INVALIDA` | Id no numérico o menor o igual a 0; búsqueda `q` de más de 100 caracteres. En la carga: sin archivo, archivo de más de 2 MB u otro problema al recibirlo ("No fue posible recibir el archivo. Verifica que sea válido."), archivo vacío, CSV mal formado (incluida una fila con otro número de columnas), o encabezado que no tiene exactamente las 11 columnas (en cualquier orden) |
 | 404 | `NO_ENCONTRADO` | El id no existe (detalle o alta de despliegue), o la ruta no existe |
 | 409 | `CONFLICTO` | Ya existe una aplicación con ese nombre, o la aplicación ya tiene un despliegue en ese ambiente |
 | 413 | `LOTE_EXCEDE_LIMITE` | El archivo CSV trae más filas de datos que `MAX_FILAS_CSV` (100 por defecto) |
-| 422 | `REGLA_NEGOCIO` | Lo enviado está bien formado pero incumple una regla de negocio (sección 5) |
-| 500 | `ERROR_INTERNO` | Falla inesperada. El detalle va al log, **nunca** a la página |
-| 503 | `SERVICIO_NO_DISPONIBLE` | La aplicación está en ejecución pero no llega a la base de datos. Se muestra una página de error amable con la opción de reintentar |
+| 422 | `REGLA_NEGOCIO` | Un valor inválido en un formulario o en una fila del CSV: obligatorio vacío, valor fuera de la lista permitida, texto demasiado largo, fecha inválida, o una regla de negocio (sección 5) |
+| 500 | `ERROR_INTERNO` | Cualquier otra falla, **incluida la base de datos caída**. La página muestra un mensaje amable; el detalle va al log, **nunca** a la página |
+| 503 | `SERVICIO_NO_DISPONIBLE` | Solo en `GET /health`: la aplicación está en ejecución pero no llega a la base de datos. Las páginas no usan `503` |
 
-**400 frente a 422.** Se usa 400 cuando lo enviado está mal formado y 422 cuando está bien formado pero rompe una regla. Es una convención del proyecto: otros equipos usan solo 400.
+**400 frente a 422.** Se usa 400 cuando la petición o el archivo no se pueden procesar (id inválido, búsqueda demasiado larga, archivo ausente, demasiado grande, vacío, mal formado o con columnas incorrectas) y 422 cuando se pueden leer pero algún valor es inválido o rompe una regla. Es una convención del proyecto: otros equipos usan solo 400.
 
 ## 4. Qué errores puede dar cada página o acción
 
-Todas pueden dar además `500`. Las que consultan la base de datos pueden dar `503`. Ambos se muestran en la página de error propia.
+Las que consultan o modifican la base de datos pueden dar además `500`, también cuando la base no responde. La última columna indica dónde se muestra el error, incluido el `500`.
 
 | Página o acción | 400 | 404 | 409 | 413 | 422 | Dónde se muestra el error |
 |---|:-:|:-:|:-:|:-:|:-:|---|
-| `GET /aplicaciones` (lista y búsqueda) | x | | | | | En la lista, junto al buscador |
+| `GET /aplicaciones` (lista y búsqueda) | x | | | | | En la propia lista, debajo del buscador |
 | `GET /aplicaciones/nueva` (formulario) | | | | | | |
-| `POST /aplicaciones` (alta de aplicación) | x | | x | | | En el formulario, con lo escrito |
+| `POST /aplicaciones` (alta de aplicación) | | | x | | x | En el formulario, con lo escrito |
 | `GET /aplicaciones/:id` (detalle) | x | x | | | | Página de error |
-| `POST /aplicaciones/:id/despliegues` (alta de despliegue) | x | x | x | | x | En el detalle, en el formulario de despliegue con lo escrito (el `404`, en la página de error) |
+| `POST /aplicaciones/:id/despliegues` (alta de despliegue) | x | x | x | | x | `409` y `422`: redirige (`302`) al detalle, que muestra el mensaje en el panel de despliegues, sin conservar lo escrito. `400`, `404` y `500`: página de error |
 | `GET /carga` (formulario de carga) | | | | | | |
-| `POST /carga` (carga del CSV) | x | | x | x | x | En la página de carga, con la fila y la columna |
-| Cualquier ruta inexistente | | x | | | | Página de error |
+| `POST /carga` (carga del CSV) | x | | x | x | x | En la página de carga, con la fila y la columna dentro del mensaje cuando aplican |
+| Cualquier ruta inexistente | | x | | | | Página 404 propia |
+
+En el alta de despliegue con `409` o `422` la respuesta es un `302`, no el código del error: el mensaje viaja en el parámetro `?error=` de la dirección del detalle.
 
 `GET /health` es la **única respuesta en JSON**: devuelve `200` con `{"estado":"ok"}` si la base de datos responde, y `503` con la estructura de la sección 2 (`codigo` `SERVICIO_NO_DISPONIBLE`) si no. No expone datos del catálogo.
 
 El `409` aparece en dos casos, ambos con `codigo` `CONFLICTO`:
 
-- **Nombre repetido** (`campo: nombre`): en el alta de aplicación y en la carga del CSV.
-- **Ambiente repetido** (`campo: ambiente`): la aplicación ya tiene un despliegue en ese ambiente. Ocurre en el alta de despliegue y en la carga del CSV, cuando dos filas de la misma aplicación traen el mismo ambiente.
+- **Nombre repetido:** en el alta de aplicación y en la carga del CSV, cuando un nombre del archivo ya existe en la base. En la carga, el mensaje dice el nombre, sin fila ni columna.
+- **Ambiente repetido:** en el alta de despliegue, cuando la aplicación ya tiene un despliegue en ese ambiente, y en la carga del CSV, cuando dos filas de la misma aplicación traen el mismo ambiente (el mensaje indica la fila y la columna).
 
 ## 5. Reglas de negocio (`422`)
 
@@ -103,31 +97,42 @@ Se aplican al crear un despliegue y a cada fila del CSV que trae un despliegue.
 
 ## 6. Orden de las validaciones
 
-Si lo enviado incumple varias cosas, se muestra el primer error en este orden:
+Si lo enviado incumple varias cosas, se muestra solo el primer error.
 
-1. **Formato** (`400`)
-2. **Existencia** (`404`)
-3. **Reglas de negocio** (`422`)
-4. **Conflictos** (`409`), que se detectan al guardar
+**Altas individuales**, en este orden:
 
-**Carga del CSV.** Antes de guardar nada se revisa el archivo: que venga y no esté vacío, que sea `.csv` y que el encabezado sea correcto (`400`), y que no supere `MAX_FILAS_CSV` filas de datos (`413`). Después se valida **fila por fila, en orden**, dentro de una sola transacción. Cada fila pasa por el orden de arriba (formato, reglas y, al guardar, conflictos). **El primer error corta:** se hace `ROLLBACK`, no se guarda nada y se indican la fila y la columna. Las filas que siguen no se evalúan.
+1. **Formato del id** (`400`), en el alta de despliegue
+2. **Existencia** (`404`): la aplicación debe existir, en el alta de despliegue
+3. **Campos y reglas de negocio** (`422`): se revisan los campos uno por uno, con R1 y R2, y se muestra el primero que falla
+4. **Conflictos** (`409`), que se detectan al guardar: nombre o ambiente repetido
+
+**Carga del CSV**, en este orden:
+
+1. **Recepción** (rutas): si no llega un archivo, supera 2 MB o no se puede recibir, `400`.
+2. **Lectura** (servicio): quita el BOM, detecta el separador y omite las líneas vacías. Luego, en este orden:
+   1. si el CSV está mal formado, `400` con "El archivo CSV tiene un formato inválido cerca de la línea N.". Incluye una fila con otro número de columnas que el encabezado: la librería la rechaza al leer, antes de los chequeos siguientes;
+   2. si el archivo está vacío, `400`;
+   3. si el encabezado no tiene exactamente las 11 columnas, `400`;
+   4. si hay más filas de datos que `MAX_FILAS_CSV`, `413`.
+3. **Agrupación** (servicio): las filas se agrupan por `nombre`.
+4. **Validación de todo el archivo, antes de guardar nada** (servicio): aplicación por aplicación, en el orden en que aparece cada nombre por primera vez. De cada aplicación se validan primero sus datos (de su primera fila) y luego cada despliegue. Un valor inválido da `422` con la fila y la columna; un ambiente repetido dentro del archivo, `409` con la fila y la columna.
+5. **Guardado** (servicio): solo si todo es válido, se abre **una** transacción. Por cada aplicación se verifica que el nombre no exista en la base y se guardan la aplicación y sus despliegues. Un nombre que ya existe da `409` con el nombre, sin fila ni columna, y se hace `ROLLBACK`. Si todo sale bien, `COMMIT`.
+
+**El primer error corta:** no se guarda nada (todo o nada) y lo que sigue no se evalúa. Como se valida aplicación por aplicación, el error informado no es siempre el de la fila más baja del archivo.
 
 - Un `nombre` repetido entre filas **no es un error**: es la misma aplicación. Sus datos de aplicación salen de la primera fila con ese nombre y las siguientes solo aportan despliegues ([ADR-0006](adr/0006-carga-masiva-csv.md)).
-- Un `nombre` que ya existe en la base da `409` con `campo: nombre`, en la primera fila donde aparece.
-- Un ambiente repetido para la misma aplicación da `409` con `campo: ambiente`, en la fila donde se repite.
+- El servidor no revisa la extensión del archivo: el formulario sugiere `.csv` al elegirlo, pero lo que cuenta es el contenido.
 
 ## 7. Traducción de errores de la base de datos
 
-El servicio no debe dejar escapar errores de la base de datos. Traducción recomendada, usando el código `SQLSTATE` de PostgreSQL (en Node.js con `pg`, viene en `error.code`, y el nombre de la restricción en `error.constraint`):
+El servicio no deja escapar errores de la base de datos. Solo se traduce uno, usando el código `SQLSTATE` de PostgreSQL (en Node.js con `pg`, viene en `error.code`):
 
 | `SQLSTATE` | Significado | Se traduce a |
 |---|---|---|
-| `23505` | `unique_violation` | 409 `CONFLICTO`. Según la restricción que falló: `uq_aplicacion_nombre` → `campo: nombre`; `uq_despliegue_aplicacion_ambiente` → `campo: ambiente` |
-| `23503` | `foreign_key_violation` | 404 `NO_ENCONTRADO` (la aplicación padre no existe) |
-| `23514` | `check_violation` | 422 `REGLA_NEGOCIO` (normalmente se detecta antes, en el servicio) |
-| `23502` | `not_null_violation` | 400 `PETICION_INVALIDA` (normalmente se detecta antes) |
-| clase `08` y errores de conexión (rechazada, tiempo agotado; en Node.js, por ejemplo, `ECONNREFUSED`) | Sin conexión | 503 `SERVICIO_NO_DISPONIBLE` |
-| cualquier otro | Inesperado | 500 `ERROR_INTERNO` |
+| `23505` | `unique_violation` | 409 `CONFLICTO`: nombre repetido (`uq_aplicacion_nombre`) o ambiente repetido (`uq_despliegue_aplicacion_ambiente`) |
+| cualquier otro, incluidos los errores de conexión (base caída, tiempo agotado) | Inesperado | 500 `ERROR_INTERNO`, con un mensaje amable en la página |
+
+`23503` (clave foránea) no ocurre porque antes se verifica que la aplicación existe (`404`), y `23514` (`CHECK` de R1 y R2) tampoco, porque R1 y R2 se validan antes (`422`).
 
 ## 8. Ejemplos
 
@@ -135,58 +140,59 @@ El servicio no debe dejar escapar errores de la base de datos. Traducción recom
 
 ```text
 GET /aplicaciones/42                         HTTP 404, página de error
-codigo:   NO_ENCONTRADO
-mensaje:  No existe una aplicación con id 42
+mensaje:  La aplicación solicitada no existe.
 ```
 
 **409: nombre duplicado**
 
 ```text
 POST /aplicaciones                           HTTP 409, formulario de alta con lo escrito
-codigo:   CONFLICTO
-mensaje:  Ya existe una aplicación llamada CRM Comercial
-detalles: campo nombre, motivo "duplicado" (se marca junto al campo Nombre)
+mensaje:  Ya existe una aplicación con ese nombre.
 ```
 
 **409: ambiente repetido**
 
 ```text
-POST /aplicaciones/7/despliegues             HTTP 409, detalle con el formulario de despliegue
-codigo:   CONFLICTO
-mensaje:  La aplicación ya tiene un despliegue en PROD
-detalles: campo ambiente, motivo "duplicado" (se marca junto a la lista de ambientes)
+POST /aplicaciones/7/despliegues             HTTP 302 a /aplicaciones/7?error=...
+mensaje:  La aplicación ya tiene un despliegue en el ambiente PROD.
+          (se muestra en el panel de despliegues del detalle; el formulario queda vacío)
 ```
 
 **422 en la carga: falla la fila 5**
 
 ```text
 POST /carga                                  HTTP 422, página de carga
-codigo:   REGLA_NEGOCIO
-mensaje:  Fila 5, columna proveedor_nube: si la modalidad es NUBE, proveedor_nube es obligatorio
-detalles: fila 5, campo proveedor_nube, motivo "obligatorio cuando modalidad es NUBE"
-No se guardó ninguna fila del archivo.
+mensaje:  Fila 5, columna "proveedor_nube": Es obligatorio para modalidad NUBE y debe ser AWS, AZURE, GCP u OTRO.
+No se importaron los registros. Verifica el archivo e inténtalo nuevamente.
+```
+
+**409 en la carga: el nombre ya existe en el catálogo**
+
+```text
+POST /carga                                  HTTP 409, página de carga
+mensaje:  La aplicación "CRM Comercial" ya existe en el catálogo.
+No se importaron los registros. Verifica el archivo e inténtalo nuevamente.
 ```
 
 **400 en la carga: encabezado incorrecto**
 
 ```text
 POST /carga                                  HTTP 400, página de carga
-codigo:   PETICION_INVALIDA
-mensaje:  Al encabezado le falta la columna ambiente
-detalles: fila 1, campo ambiente, motivo "columna faltante"
+mensaje:  El encabezado debe contener exactamente estas columnas: nombre, descripcion, origen, equipo_responsable, activa, version, ambiente, modalidad, proveedor_nube, ubicacion, desplegado_en.
 ```
 
-**413: archivo demasiado grande**
+**413: demasiadas filas de datos**
 
 ```text
 POST /carga                                  HTTP 413, página de carga
-codigo:   LOTE_EXCEDE_LIMITE
-mensaje:  El archivo trae 150 filas y el máximo permitido es 100
+mensaje:  El archivo supera el límite de 100 filas de datos.
 ```
 
 ## 9. Reglas para quien implementa
 
-- Ninguna página muestra el error por defecto de Express. Hay que registrar un **manejador global** que muestre la página de error propia: para rutas inexistentes (`404` con `NO_ENCONTRADO`), para errores inesperados (`500`) y para la base de datos caída (`503`). El esqueleto de `app/src/index.js` no trae ninguno de los dos manejadores: los agrega quien desarrolla, junto con la página de error ([app/README.md](../app/README.md#2-estado)).
+- Para las rutas inexistentes hay un **manejador global** en `app/src/index.js` que muestra la página 404 propia. Es el único manejador global.
+- Lo que Express rechaza antes de llegar a una ruta sale con su página por defecto (sin trazas, porque la imagen usa `NODE_ENV=production`). Son dos casos raros: una dirección mal codificada (por ejemplo, `GET /aplicaciones/%E0%A4%A`) da `400` "Bad Request", y un formulario de más de 100 kB (límite por defecto de `express.urlencoded`) da `413` "Payload Too Large".
+- No hay manejador global para los errores inesperados: cada ruta atrapa sus errores (`try`/`catch`) y muestra el `500` con un mensaje amable en su propia página (sección 4). Una ruta nueva tiene que hacer lo mismo.
 - Nunca se muestra una traza de pila, una consulta SQL ni el mensaje original de la base de datos. Se registran en el log del contenedor (salida estándar), donde `docker compose logs app` los muestra.
 - `GET /health` es la única respuesta en JSON.
-- El texto de `mensaje` puede cambiar; el `codigo` no.
+- El texto de los mensajes puede cambiar; los códigos HTTP y el `codigo` de `/health`, no.

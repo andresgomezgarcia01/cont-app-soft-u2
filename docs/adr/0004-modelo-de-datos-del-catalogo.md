@@ -34,6 +34,6 @@ Criterios que guiaron el diseño:
 
 ## Consecuencias
 
-- Un ambiente repetido para la misma aplicación da `409`, tanto en el alta de un despliegue como en la carga de un archivo CSV ([errores.md](../errores.md)). El alcance es crear y consultar ([ADR-0003](0003-aplicacion-monolitica-en-capas.md)): un despliegue se crea y no se edita.
+- Un ambiente repetido para la misma aplicación se rechaza con `409`, tanto en el alta de un despliegue (por la restricción `UNIQUE`), donde el mensaje se muestra en el detalle de la aplicación, como en la carga de un archivo CSV, donde el servicio lo detecta antes de guardar e indica la fila donde se repite ([errores.md](../errores.md)). El alcance es crear y consultar ([ADR-0003](0003-aplicacion-monolitica-en-capas.md)): un despliegue se crea y no se edita.
 - Entre ambas tablas suman 15 columnas, con tipos variados.
 - Los "15 datos" de la rúbrica se cumplen con **al menos 15 aplicaciones**, cada una con sus despliegues, ingresadas durante el video.
