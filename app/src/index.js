@@ -1,23 +1,12 @@
 // Esqueleto mínimo para que el contenedor arranque y se verifique.
 // La especificación del desarrollo está en app/README.md.
 const express = require('express');
-const { Pool } = require('pg');
+const pool = require('./repositories/conexion');
 
 // Configuración desde variables de entorno (en Docker las pone docker-compose.yml).
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: Number.parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME || 'catalogo',
-  user: process.env.DB_USER || 'catalogo',
-  password: process.env.DB_PASSWORD || 'catalogo_dev',
-  // Si la base no responde en 5 s, la consulta falla en vez de quedar colgada:
-  // connectionTimeoutMillis limita el tiempo para abrir una conexión nueva y
-  // query_timeout el de cada consulta, también sobre una conexión ya abierta.
-  connectionTimeoutMillis: 5000,
-  query_timeout: 5000,
-});
+
 
 // Un error en una conexión inactiva (por ejemplo, la base se reinicia) se
 // registra en lugar de terminar el proceso.
@@ -26,6 +15,21 @@ pool.on('error', (error) => {
 });
 
 const app = express();
+const path = require('path');
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+app.use(express.urlencoded({ extended: false }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use('/aplicaciones', require('./routes/aplicaciones'));
+app.use('/carga', require('./routes/carga'));
+
+// Página principal: redirige al catálogo.
+app.get('/', (req, res) => {
+  res.redirect('/aplicaciones');
+});
 
 // Estado del servicio: dice si la aplicación llega a la base de datos.
 app.get('/health', async (req, res) => {

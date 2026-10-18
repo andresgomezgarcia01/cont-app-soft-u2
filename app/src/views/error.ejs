@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error <%= codigo %></title>
+  <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+  <header class="encabezado">
+    <h1>Error <%= codigo %></h1>
+    <p>No fue posible completar la solicitud.</p>
+  </header>
+
+  <main class="contenedor">
+    <section class="panel">
+      <p role="alert"><%= mensaje %></p>
+      <p><a href="/aplicaciones">Volver al catálogo</a></p>
+    </section>
+  </main>
+</body>
+</html>

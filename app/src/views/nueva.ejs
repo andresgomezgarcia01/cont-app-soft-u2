@@ -1,0 +1,72 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nueva aplicación</title>
+  <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+  <header class="encabezado">
+    <h1>Registrar aplicación</h1>
+    <p>Completa la información básica de la aplicación.</p>
+  </header>
+
+  <main class="contenedor">
+    <section class="panel">
+      <% if (error) { %>
+        <p role="alert"><%= error %></p>
+      <% } %>
+
+      <form action="/aplicaciones" method="POST">
+        <label for="nombre">Nombre *</label>
+        <input
+          id="nombre"
+          name="nombre"
+          type="text"
+          maxlength="100"
+          required
+          value="<%= datos.nombre || '' %>"
+        >
+
+        <label for="descripcion">Descripción</label>
+        <textarea
+          id="descripcion"
+          name="descripcion"
+          rows="4"
+        ><%= datos.descripcion || '' %></textarea>
+
+        <label for="origen">Origen *</label>
+        <select id="origen" name="origen" required>
+          <option value="">Selecciona una opción</option>
+          <option value="PROPIA" <%= datos.origen === 'PROPIA' ? 'selected' : '' %>>Propia</option>
+          <option value="PROVEEDOR" <%= datos.origen === 'PROVEEDOR' ? 'selected' : '' %>>Proveedor</option>
+        </select>
+
+        <label for="equipo_responsable">Equipo responsable *</label>
+        <input
+          id="equipo_responsable"
+          name="equipo_responsable"
+          type="text"
+          maxlength="100"
+          required
+          value="<%= datos.equipo_responsable || '' %>"
+        >
+
+        <label>
+          <input
+            type="checkbox"
+            name="activa"
+            <%= datos.activa === undefined || datos.activa === 'on' ? 'checked' : '' %>
+          >
+          Aplicación activa
+        </label>
+
+        <button type="submit">Guardar aplicación</button>
+        <a href="/aplicaciones">Cancelar</a>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

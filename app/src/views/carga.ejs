@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carga de aplicaciones</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+
+<body>
+    <header class="encabezado">
+        <h1>Carga masiva de aplicaciones</h1>
+        <p>Importa aplicaciones y sus despliegues mediante un archivo CSV.</p>
+    </header>
+
+    <main class="contenedor">
+        <section class="panel">
+            <h2>Seleccionar archivo</h2>
+
+            <% if (error) { %>
+                <div class="alerta alerta-error" role="alert">
+                    <span class="alerta-icono" aria-hidden="true">!</span>
+
+                    <div class="alerta-contenido">
+                        <h3>No se pudo importar el archivo</h3>
+                        <p><%= error %></p>
+                        <p class="alerta-ayuda">
+                            No se importaron los registros. Verifica el archivo e inténtalo nuevamente.
+                        </p>
+                    </div>
+                </div>
+            <% } %>
+
+            <% if (mensaje) { %>
+                <div class="alerta alerta-exito" role="status">
+                    <span class="alerta-icono" aria-hidden="true">✓</span>
+
+                    <div class="alerta-contenido">
+                        <h3>Importación completada</h3>
+                        <p><%= mensaje %></p>
+                    </div>
+                </div>
+            <% } %>
+
+            <form action="/carga" method="POST" enctype="multipart/form-data">
+                <label for="archivo">Archivo CSV</label>
+
+                <input
+                    id="archivo"
+                    name="archivo"
+                    type="file"
+                    accept=".csv,text/csv"
+                    required
+                >
+
+                <button type="submit">Importar CSV</button>
+            </form>
+
+            <p>El archivo debe contener las 11 columnas definidas en la plantilla del proyecto.</p>
+
+            <p>
+                <a href="/aplicaciones">Volver al catálogo</a>
+            </p>
+        </section>
+    </main>
+</body>
+
+</html>

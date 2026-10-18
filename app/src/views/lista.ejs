@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo de aplicaciones</title>
+  <link rel="stylesheet" href="/css/estilos.css">
+</head>
+
+<body>
+  <header class="encabezado">
+    <h1>Catálogo de aplicaciones</h1>
+    <p>Administra las aplicaciones y sus despliegues.</p>
+  </header>
+
+  <main class="contenedor">
+    <section class="panel">
+      <h2>Aplicaciones registradas</h2>
+
+      <form action="/aplicaciones" method="GET">
+        <label for="q">Buscar por nombre</label>
+        <input id="q" name="q" type="search" maxlength="100" value="<%= busqueda %>"
+          placeholder="Escribe el nombre de una aplicación">
+        <button type="submit">Buscar</button>
+        <a href="/aplicaciones">Limpiar</a>
+      </form>
+
+      <% if (error) { %>
+        <p role="alert">
+          <%= error %>
+        </p>
+        <% } else if (aplicaciones.length===0) { %>
+          <p>No se encontraron aplicaciones.</p>
+          <% } else { %>
+            <div class="tabla-contenedor">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Origen</th>
+                    <th>Equipo responsable</th>
+                    <th>Activa</th>
+                    <th>Fecha de registro</th>
+                    <th>Despliegues</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% aplicaciones.forEach((aplicacion)=> { %>
+                    <tr>
+                      <td>
+                        <a href="/aplicaciones/<%= aplicacion.id %>">
+                          <%= aplicacion.nombre %>
+                        </a>
+                      </td>
+                      <td>
+                        <%= aplicacion.origen %>
+                      </td>
+                      <td>
+                        <%= aplicacion.equipo_responsable %>
+                      </td>
+                      <td>
+                        <%= aplicacion.activa ? 'Sí' : 'No' %>
+                      </td>
+                      <td>
+                        <%= aplicacion.fecha_registro %>
+                      </td>
+                      <td>
+                        <%= aplicacion.cantidad_despliegues %>
+                      </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+              </table>
+            </div>
+            <% } %>
+    </section>
+  </main>
+</body>
+
+</html>

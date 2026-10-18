@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de aplicación | Catálogo de aplicaciones</title>
+    <link rel="stylesheet" href="/css/estilos.css">
+</head>
+
+<body>
+    <header class="encabezado">
+        <h1>
+            <%= aplicacion.nombre %>
+        </h1>
+        <p>Información general y despliegues registrados.</p>
+    </header>
+
+    <main class="contenedor">
+        <section class="panel">
+            <h2>Información general</h2>
+
+            <p>
+                <strong>ID:</strong>
+                <%= aplicacion.id %>
+            </p>
+
+            <p>
+                <strong>Descripción:</strong>
+                <%= aplicacion.descripcion || 'Sin descripción' %>
+            </p>
+
+            <p>
+                <strong>Origen:</strong>
+                <%= aplicacion.origen %>
+            </p>
+
+            <p>
+                <strong>Equipo responsable:</strong>
+                <%= aplicacion.equipo_responsable %>
+            </p>
+
+            <p>
+                <strong>Estado:</strong>
+                <%= aplicacion.activa ? 'Activa' : 'Inactiva' %>
+            </p>
+
+            <p>
+                <strong>Fecha de registro:</strong>
+                <%= aplicacion.fecha_registro %>
+            </p>
+
+            <p>
+                <a href="/aplicaciones">Volver al catálogo</a>
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>Despliegues registrados</h2>
+
+            <% if (error) { %>
+                <div class="mensaje-error" role="alert">
+                    <strong>Error:</strong>
+                    <%= error %>
+                </div>
+                <% } %>
+
+                    <% if (aplicacion.despliegues.length===0) { %>
+                        <p>
+                            Esta aplicación todavía no tiene despliegues registrados.
+                        </p>
+                        <% } else { %>
+                            <div class="tabla-contenedor">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Versión</th>
+                                            <th>Ambiente</th>
+                                            <th>Modalidad</th>
+                                            <th>Proveedor de nube</th>
+                                            <th>Ubicación</th>
+                                            <th>Fecha de despliegue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% aplicacion.despliegues.forEach((despliegue)=> { %>
+                                            <tr>
+                                                <td>
+                                                    <%= despliegue.version %>
+                                                </td>
+                                                <td>
+                                                    <%= despliegue.ambiente %>
+                                                </td>
+                                                <td>
+                                                    <%= despliegue.modalidad %>
+                                                </td>
+                                                <td>
+                                                    <%= despliegue.proveedor_nube || 'No aplica' %>
+                                                </td>
+                                                <td>
+                                                    <%= despliegue.ubicacion || 'No especificada' %>
+                                                </td>
+                                                <td>
+                                                    <%= new Date(despliegue.desplegado_en).toLocaleString('es-CO', {
+                                                        timeZone: 'America/Bogota' , day: '2-digit' , month: '2-digit' ,
+                                                        year: 'numeric' , hour: '2-digit' , minute: '2-digit' , hour12:
+                                                        false }) %>
+                                                </td>
+                                            </tr>
+                                            <% }) %>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <% } %>
+        </section>
+
+        <section class="panel">
+            <h2>Registrar despliegue</h2>
+
+            <form action="/aplicaciones/<%= aplicacion.id %>/despliegues" method="POST">
+                <label for="version">Versión</label>
+                <input type="text" id="version" name="version" maxlength="30" required
+                    value="<%= (datosDespliegue && datosDespliegue.version) || '' %>">
+
+                <label for="ambiente">Ambiente</label>
+                <select id="ambiente" name="ambiente" required>
+                    <option value="">Selecciona un ambiente</option>
+                    <option value="DEV" <%=datosDespliegue && datosDespliegue.ambiente==='DEV' ? 'selected' : '' %>
+                        >DEV</option>
+                    <option value="QA" <%=datosDespliegue && datosDespliegue.ambiente==='QA' ? 'selected' : '' %>
+                        >QA</option>
+                    <option value="PROD" <%=datosDespliegue && datosDespliegue.ambiente==='PROD' ? 'selected' : '' %>
+                        >PROD</option>
+                </select>
+
+                <label for="modalidad">Modalidad</label>
+                <select id="modalidad" name="modalidad" required>
+                    <option value="">Selecciona una modalidad</option>
+                    <option value="ON_PREMISE" <%=datosDespliegue && datosDespliegue.modalidad==='ON_PREMISE'
+                        ? 'selected' : '' %>
+                        >ON_PREMISE</option>
+                    <option value="NUBE" <%=datosDespliegue && datosDespliegue.modalidad==='NUBE' ? 'selected' : '' %>
+                        >NUBE</option>
+                    <option value="SAAS" <%=datosDespliegue && datosDespliegue.modalidad==='SAAS' ? 'selected' : '' %>
+                        >SAAS</option>
+                </select>
+
+                <div id="contenedor-proveedor-nube">
+                    <label for="proveedor_nube">Proveedor de nube</label>
+                    <select id="proveedor_nube" name="proveedor_nube" required>
+                        <option value="">Selecciona un proveedor</option>
+                        <option value="AWS" <%=datosDespliegue && datosDespliegue.proveedor_nube==='AWS' ? 'selected'
+                            : '' %>>AWS</option>
+                        <option value="AZURE" <%=datosDespliegue && datosDespliegue.proveedor_nube==='AZURE'
+                            ? 'selected' : '' %>>Azure</option>
+                        <option value="GCP" <%=datosDespliegue && datosDespliegue.proveedor_nube==='GCP' ? 'selected'
+                            : '' %>>Google Cloud Platform</option>
+                        <option value="OTRO" <%=datosDespliegue && datosDespliegue.proveedor_nube==='OTRO' ? 'selected'
+                            : '' %>>Otro</option>
+                    </select>
+                </div>
+
+                <label for="ubicacion">Ubicación</label>
+                <input type="text" id="ubicacion" name="ubicacion" maxlength="100"
+                    value="<%= (datosDespliegue && datosDespliegue.ubicacion) || '' %>">
+
+                <label for="desplegado_en">Fecha y hora del despliegue</label>
+                <input type="datetime-local" id="desplegado_en" name="desplegado_en"
+                    value="<%= (datosDespliegue && datosDespliegue.desplegado_en) || '' %>">
+
+                <button type="submit">Registrar despliegue</button>
+            </form>
+        </section>
+    </main>
+    <script>
+        const modalidad = document.getElementById('modalidad');
+        const proveedor = document.getElementById('proveedor_nube');
+        const contenedorProveedor = document.getElementById('contenedor-proveedor-nube');
+
+        function actualizarProveedor() {
+            const requiereProveedor = modalidad.value === 'NUBE';
+
+            contenedorProveedor.hidden = !requiereProveedor;
+            proveedor.required = requiereProveedor;
+            proveedor.disabled = !requiereProveedor;
+
+            if (!requiereProveedor) {
+                proveedor.value = '';
+            }
+        }
+
+        modalidad.addEventListener('change', actualizarProveedor);
+        actualizarProveedor();
+    </script>
+</body>
+
+</html>
