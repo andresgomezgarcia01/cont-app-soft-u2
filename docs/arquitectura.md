@@ -65,7 +65,16 @@ Navegador  ->  Rutas  ->  Servicios  ->  Repositorios  ->  PostgreSQL
 
 Las dependencias van en un solo sentido: las rutas usan los servicios y las vistas; los servicios usan los repositorios; los repositorios solo hablan con la base.
 
-El esqueleto actual es un solo archivo, `app/src/index.js`: las carpetas de la tabla las crea quien desarrolla, según la especificación de [app/README.md](../app/README.md#7-capas). El motor de plantillas también lo elige quien desarrolla.
+El punto de entrada es `app/src/index.js`: lee la configuración, monta las rutas y los archivos estáticos, responde `/health`, muestra la página 404 y hace el apagado ordenado. Las plantillas usan EJS. Los archivos de cada capa, dentro de `app/src/`, son:
+
+| Capa | Archivos |
+|---|---|
+| Vistas | `views/lista.ejs` (lista y búsqueda), `views/detalle.ejs` (detalle, despliegues y formulario de despliegue), `views/nueva.ejs` (alta de aplicación), `views/carga.ejs` (carga del CSV) y `views/error.ejs` (página de error, incluida la 404). Los estilos están en `public/css/estilos.css` |
+| Rutas | `routes/aplicaciones.js` (`/aplicaciones`: lista, detalle, alta de aplicación y alta de despliegue) y `routes/carga.js` (`/carga`: recibe el archivo) |
+| Servicios | `services/aplicaciones.js` y `services/despliegues.js` (altas y consultas); para la carga del CSV, `services/lector-csv.js` (lectura, separador, encabezado y tope de filas), `services/agrupar-csv.js` (agrupa las filas por aplicación), `services/validador-csv.js` (validación de cada aplicación y despliegue) y `services/importacion.js` (guarda todo en una transacción) |
+| Repositorios | `repositories/conexion.js` (el pool de `pg`), `repositories/aplicaciones.js` y `repositories/despliegues.js` (consultas SQL) |
+
+La responsabilidad de cada capa:
 
 | Capa | Carpeta | Responsabilidad | No debe |
 |---|---|---|---|
@@ -88,7 +97,7 @@ El esqueleto actual es un solo archivo, `app/src/index.js`: las carpetas de la t
 | Nombre de aplicación repetido | `UNIQUE` en BD, traducido por el servicio | 409 |
 | Ambiente repetido para la misma aplicación (alta o carga del CSV) | `UNIQUE (aplicacion_id, ambiente)` en BD, traducido por el servicio | 409 |
 
-El detalle de páginas, rutas y formularios está en [app/README.md](../app/README.md).
+Las páginas y los formularios están en las rutas `routes/aplicaciones.js` y `routes/carga.js` y en las vistas de la tabla de archivos de arriba.
 
 ## 5. Modelo de datos
 
@@ -166,7 +175,7 @@ sequenceDiagram
 - **Todo o nada.** Si cualquier fila falla, se hace `ROLLBACK`: no se guarda nada y la página de carga indica la fila (con el encabezado como fila 1) y la columna del primer error. Las filas siguientes no se evalúan.
 - Si el problema es del archivo completo (ausente, vacío, encabezado incorrecto o más filas que `MAX_FILAS_CSV`), las rutas responden `400` o `413` sin abrir la transacción.
 
-El formato del archivo está en [app/README.md](../app/README.md) y en el [ADR-0006](adr/0006-carga-masiva-csv.md); el orden de validación, en [errores.md](errores.md#6-orden-de-las-validaciones).
+El formato del archivo está en [docs/datos/README.md](datos/README.md) y en el [ADR-0006](adr/0006-carga-masiva-csv.md); el orden de validación, en [errores.md](errores.md#6-orden-de-las-validaciones).
 
 ## 7. Contenerización
 
@@ -194,7 +203,7 @@ El formato del archivo está en [app/README.md](../app/README.md) y en el [ADR-0
 | `PORT` | `app` | `3000` | Puerto en el que escucha la aplicación dentro del contenedor (fijo en Compose) |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | `app` | `db`, `5432`, derivadas de las `POSTGRES_*` | Conexión a la base de datos. `DB_HOST` y `DB_PORT` son fijos: es la dirección de `db` dentro de la red |
 
-`DB_PORT` tiene dos usos: en `.env` es el puerto de la máquina donde se publica `db`; dentro del contenedor `app`, Compose lo fija en 5432, el puerto de `db` en la red. Cuando la aplicación corre en la máquina, sin contenedor, toma los valores por defecto definidos en su código (`localhost` y `5432`), detallados en [app/README.md](../app/README.md).
+`DB_PORT` tiene dos usos: en `.env` es el puerto de la máquina donde se publica `db`; dentro del contenedor `app`, Compose lo fija en 5432, el puerto de `db` en la red. Cuando la aplicación corre en la máquina, sin contenedor, toma los valores por defecto definidos en su código: la conexión en [`app/src/repositories/conexion.js`](../app/src/repositories/conexion.js) (`localhost`, `5432`, base y usuario `catalogo`, contraseña `catalogo_dev`) y el puerto en [`app/src/index.js`](../app/src/index.js) (`3000`). Coinciden con los de [`.env.example`](../.env.example).
 
 ## 8. Decisiones registradas
 

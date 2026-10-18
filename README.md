@@ -78,7 +78,7 @@ Arranca solo la base, en segundo plano (`-d`). La primera vez crea las tablas.
 - en `docker compose ps`, el contenedor `catalogo-apps-db-1` con estado `Up` y, a los pocos segundos, `(healthy)`;
 - en los logs, `database system is ready to accept connections`.
 
-Desde la máquina, la base queda en `localhost:5432` (usuario `catalogo`, contraseña `catalogo_dev`, base `catalogo`). Sirve para desarrollar la aplicación sin contenedor ([app/README.md](app/README.md)) o para conectarse con un cliente SQL.
+Desde la máquina, la base queda en `localhost:5432` (usuario `catalogo`, contraseña `catalogo_dev`, base `catalogo`). Sirve para conectarse con un cliente SQL o para correr la aplicación fuera de Docker: con la base levantada y Node.js 20 o superior instalado, se ejecutan `npm install` y `npm start` dentro de `app/`. La aplicación se conecta a `localhost:5432` con los valores por defecto y queda en `http://localhost:3000`.
 
 ### Fase 5. Cargar datos de ejemplo (opcional)
 
@@ -101,7 +101,7 @@ Construye lo que haya cambiado y levanta `db` y `app`. `app` espera a que la bas
 
 **Qué se debería ver:** en `docker compose ps`, `catalogo-apps-db-1` y `catalogo-apps-app-1` `(healthy)` (los primeros segundos, `app` puede mostrar `(health: starting)`). Abrir en el navegador:
 
-- `http://localhost:3000`: la aplicación (mientras no esté desarrollada, responde `Cannot GET /`: es lo esperado);
+- `http://localhost:3000`: redirige a `http://localhost:3000/aplicaciones`, la lista del catálogo, con el buscador por nombre y los botones **Crear aplicación** y **Carga masiva**. Con la base vacía, la lista dice `No se encontraron aplicaciones.` La carga masiva (`/carga`) recibe un archivo CSV con el formato de [docs/datos/README.md](docs/datos/README.md);
 - `http://localhost:3000/health`: `{"estado":"ok"}`, que indica que la aplicación llega a la base.
 
 La base de datos arranca **vacía**: `docker compose up` crea las tablas pero no carga datos (para eso, la fase 5).
@@ -165,7 +165,7 @@ docker compose logs db
 | Síntoma | Causa | Solución |
 |---|---|---|
 | `error during connect` o `Cannot connect to the Docker daemon` | Docker Desktop no está abierto | Abrirlo y esperar a que indique que el motor está corriendo. Repetir el comando |
-| `port is already allocated` o `address already in use` con el 5432 | Hay otro PostgreSQL usando ese puerto en la máquina | En `.env`, `DB_PORT=5433` (u otro libre) y volver a levantar. La aplicación local también debe usar ese puerto ([app/README.md](app/README.md)) |
+| `port is already allocated` o `address already in use` con el 5432 | Hay otro PostgreSQL usando ese puerto en la máquina | En `.env`, `DB_PORT=5433` (u otro libre) y volver a levantar. Si la aplicación corre fuera de Docker, también debe usar ese puerto: la variable de entorno `DB_PORT=5433` al ejecutar `npm start` |
 | Lo mismo con el 3000 | Otro programa usa ese puerto | En `.env`, `APP_PORT=3001` y abrir `http://localhost:3001` |
 | Faltan tablas o columnas, o no se ven los cambios de `schema.sql` | El volumen es de antes del cambio: las tablas solo se crean con el volumen vacío | Fase 10 |
 | `http://localhost:3000/health` responde `503` | La aplicación no llega a la base | `docker compose ps` para ver si `db` está `(healthy)` y `docker compose logs db` para ver por qué no |
@@ -180,15 +180,21 @@ cont-app-soft-u2/
   .env.example            variables configurables (opcional)
   app/                    la aplicación (ver app/README.md)
     Dockerfile            imagen de la aplicación: el servidor web (Node.js)
-    package.json          dependencias
-    src/index.js          punto de entrada (por ahora, el único archivo de código; las capas se crean al desarrollar)
+    package.json          dependencias (package-lock.json fija las versiones)
+    src/
+      index.js            punto de entrada: configuración, rutas, /health, página 404 y apagado ordenado
+      routes/             rutas: reciben la petición y eligen qué página mostrar (catálogo y carga del CSV)
+      services/           reglas de negocio y validaciones, incluida la lectura y validación del CSV
+      repositories/       conexión con PostgreSQL y consultas SQL
+      views/              plantillas EJS de las páginas (lista, detalle, alta, carga y error)
+      public/             archivos estáticos (la hoja de estilos)
   db/
     Dockerfile            imagen de la base de datos (PostgreSQL + esquema)
     schema.sql            tablas, claves y restricciones
     seed/seed.sql         datos de ejemplo a pedido (idempotente)
   docs/                   documentación del proyecto
     adr/                  decisiones de arquitectura
-    datos/                archivos CSV de ejemplo para la carga
+    datos/                archivos CSV de ejemplo para la carga y su formato (README.md)
 ```
 
 ## Documentación
@@ -197,7 +203,7 @@ cont-app-soft-u2/
 |---|---|
 | [docs/arquitectura.md](docs/arquitectura.md) | Visión general: contenedores, red, capas, modelo de datos y flujos |
 | [docs/adr/](docs/adr/README.md) | Decisiones de arquitectura y el porqué de cada una |
-| [app/README.md](app/README.md) | Especificación de la aplicación: páginas, formularios, carga del CSV, capas y cómo desarrollarla |
+| [app/README.md](app/README.md) | Presentación de la aplicación: tecnologías, arquitectura en capas, funcionalidades y cómo ejecutarla |
 | [docs/errores.md](docs/errores.md) | Códigos de error de la aplicación y cómo se muestran |
 | [docs/datos/](docs/datos/README.md) | Archivos CSV de ejemplo (la plantilla y las 15 aplicaciones del video) y el formato de las columnas |
 | [docs/comandos.md](docs/comandos.md) | Guion de los comandos Docker para el video |
@@ -208,9 +214,9 @@ cont-app-soft-u2/
 
 | Parte | Estado |
 |---|---|
-| Aplicación (`app/`) | Esqueleto mínimo: un solo archivo (`src/index.js`) que arranca, responde `/health` y cierra ordenadamente, con su `Dockerfile`. Falta todo el desarrollo: las capas, las páginas, los formularios, el manejo de errores y la carga del CSV ([app/README.md](app/README.md)). |
+| Aplicación (`app/`) | Desarrollada en capas (rutas, servicios, repositorios y vistas EJS) y verificada en Docker: `/` redirige a la lista; funcionan la lista con búsqueda, el detalle con sus despliegues, el alta de aplicación, que rechaza el nombre repetido con `409`, y el alta de despliegue, que rechaza el ambiente repetido y aplica las reglas R1 y R2; la navegación entre "Catálogo" y "Carga masiva" y la página 404 propia. La hora del formulario se toma como hora de Colombia. La carga de [`docs/datos/aplicaciones-video.csv`](docs/datos/aplicaciones-video.csv) desde `/carga` crea 15 aplicaciones y 23 despliegues; cargarla otra vez da `409` sin guardar nada. El archivo puede usar `;` como separador y traer BOM; más de 100 filas da `413`, un encabezado incorrecto da `400` y un error en una fila indica la fila y la columna sin guardar nada. `docker compose stop app` tarda alrededor de 1 s. |
 | Base de datos (`schema.sql`, `seed.sql`, `db/Dockerfile`) | Verificada en Docker con `postgres:17-alpine`: crea las tablas en el primer arranque, `db` queda *healthy*, el seed a pedido es idempotente, las restricciones rechazan los datos inválidos y los datos sobreviven a `down` y `up`. |
-| `docker-compose.yml` | Verificado en Docker: `db` y `app` *healthy*, `/health` responde (y da `503` si la base se detiene), red `catalogo-red`, la base en `127.0.0.1:5432` y la aplicación en el 3000, seed a pedido, persistencia con `down`/`up`, apagado ordenado de `app` y los 36 comandos del guion. Falta la carga del CSV y la demostración en el navegador, que dependen de la aplicación. |
+| `docker-compose.yml` | Verificado en Docker: `db` y `app` *healthy*, `/health` responde (y da `503` si la base se detiene), red `catalogo-red`, la base en `127.0.0.1:5432` y la aplicación en el 3000, seed a pedido, persistencia con `down`/`up`, apagado ordenado de `app` y los 36 comandos del guion. La demostración en el navegador queda para el video. |
 | Video | Pendiente |
 
 ## Reglas del equipo
