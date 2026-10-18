@@ -46,6 +46,14 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// 404: ninguna ruta anterior atendió la solicitud.
+app.use((req, res) => {
+  return res.status(404).render('error', {
+    codigo: 404,
+    mensaje: 'La página que buscas no existe. Verifica la dirección e inténtalo nuevamente.',
+  });
+});
+
 // Escucha en 0.0.0.0 para aceptar conexiones desde fuera del contenedor.
 const servidor = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Catálogo de aplicaciones escuchando en el puerto ${PORT}`);

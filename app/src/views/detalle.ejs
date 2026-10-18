@@ -9,12 +9,17 @@
 </head>
 
 <body>
-    <header class="encabezado">
-        <h1>
-            <%= aplicacion.nombre %>
-        </h1>
-        <p>Información general y despliegues registrados.</p>
-    </header>
+    
+<header class="encabezado">
+    <h1><%= aplicacion.nombre %></h1>
+    <p>Información general y despliegues registrados.</p>
+
+    <nav class="navegacion" aria-label="Navegación principal">
+        <a href="/aplicaciones">Catálogo</a>
+        <a href="/carga">Carga masiva</a>
+    </nav>
+</header>
+
 
     <main class="contenedor">
         <section class="panel">

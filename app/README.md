@@ -62,6 +62,7 @@ La aplicación estará disponible en:
 
 - **Catálogo:** http://localhost:3000/aplicaciones
 - **Importación CSV:** http://localhost:3000/carga
+- **Crear nueva app:** http://localhost:3000/aplicaciones/nueva
 - **Estado del servicio:** http://localhost:3000/health
 
 ## Importación de datos

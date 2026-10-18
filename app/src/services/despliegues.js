@@ -7,6 +7,52 @@ const AMBIENTES = ['DEV', 'QA', 'PROD'];
 const MODALIDADES = ['ON_PREMISE', 'NUBE', 'SAAS'];
 const PROVEEDORES = ['AWS', 'AZURE', 'GCP', 'OTRO'];
 
+function convertirFechaColombiaAUTC(fecha) {
+  if (!fecha) {
+    return new Date().toISOString();
+  }
+
+  // datetime-local entrega YYYY-MM-DDTHH:mm, sin zona horaria.
+  const formatoLocal = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+  if (!formatoLocal.test(fecha)) {
+    const error = new Error('La fecha debe tener un formato válido.');
+    error.status = 422;
+    throw error;
+  }
+
+  // Colombia usa UTC-5 y no aplica horario de verano.
+  const fechaUTC = new Date(`${fecha}:00-05:00`);
+
+  if (Number.isNaN(fechaUTC.getTime())) {
+    const error = new Error('La fecha del despliegue no es válida.');
+    error.status = 422;
+    throw error;
+  }
+
+  // Evita que fechas imposibles se normalicen automáticamente.
+  const partes = fecha.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
+  );
+
+  const fechaLocal = new Date(fechaUTC.getTime() - 5 * 60 * 60 * 1000);
+
+  if (
+    fechaLocal.getUTCFullYear() !== Number(partes[1]) ||
+    fechaLocal.getUTCMonth() + 1 !== Number(partes[2]) ||
+    fechaLocal.getUTCDate() !== Number(partes[3]) ||
+    fechaLocal.getUTCHours() !== Number(partes[4]) ||
+    fechaLocal.getUTCMinutes() !== Number(partes[5])
+  ) {
+    const error = new Error('La fecha del despliegue no es válida.');
+    error.status = 422;
+    throw error;
+  }
+
+  return fechaUTC.toISOString();
+}
+
+
 function validarDespliegue(datos) {
   const version =
     typeof datos.version === 'string' ? datos.version.trim() : '';
@@ -74,11 +120,7 @@ function validarDespliegue(datos) {
     throw error;
   }
 
-  if (desplegado_en && Number.isNaN(Date.parse(desplegado_en))) {
-    const error = new Error('La fecha del despliegue no es válida.');
-    error.status = 422;
-    throw error;
-  }
+  const fechaConvertida = convertirFechaColombiaAUTC(desplegado_en);
 
   return {
     version,
@@ -86,9 +128,7 @@ function validarDespliegue(datos) {
     modalidad,
     proveedor_nube: proveedor_nube || null,
     ubicacion: ubicacion || null,
-    desplegado_en: desplegado_en
-      ? new Date(desplegado_en).toISOString()
-      : new Date().toISOString(),
+    desplegado_en: fechaConvertida,
   };
 }
 

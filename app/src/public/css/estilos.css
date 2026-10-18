@@ -276,6 +276,114 @@ tbody tr:hover {
     font-size: 0.9rem;
 }
 
+/* Navegación principal */
+.navegacion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.navegacion a {
+  display: inline-block;
+  padding: 9px 14px;
+  color: white;
+  text-decoration: none;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: var(--radio);
+  transition: background-color 0.18s ease;
+}
+
+.navegacion a:hover,
+.navegacion a[aria-current="page"] {
+  background-color: var(--azul-hover);
+}
+
+.navegacion a:focus-visible {
+  outline: 3px solid white;
+  outline-offset: 3px;
+}
+
+/* Acciones rápidas del catálogo */
+.acciones-rapidas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.acciones-rapidas .boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: var(--radio);
+  background-color: var(--azul);
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background-color 0.18s ease;
+}
+
+.acciones-rapidas .boton:hover {
+  background-color: var(--azul-hover);
+}
+
+.acciones-rapidas .boton-secundario {
+  background-color: transparent;
+  color: var(--azul);
+  border: 1px solid var(--azul);
+}
+
+.acciones-rapidas .boton-secundario:hover {
+  background-color: var(--azul-hover);
+  color: white;
+}
+
+.acciones-rapidas .boton:focus-visible {
+  outline: 3px solid var(--azul-hover);
+  outline-offset: 3px;
+}
+
+
+/* Alertas de error en formularios */
+.alerta-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 16px;
+  color: #842029;
+  background-color: #f8d7da;
+  border: 1px solid #f1aeb5;
+  border-left: 5px solid #dc3545;
+  border-radius: var(--radio);
+}
+
+.alerta-error-icono {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: white;
+  background-color: #dc3545;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.alerta-error strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.alerta-error p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+
 
 @media (max-width: 600px) {
   .encabezado {

@@ -18,6 +18,18 @@
     <section class="panel">
       <h2>Aplicaciones registradas</h2>
 
+
+      <section class="acciones-rapidas" aria-label="Acciones rápidas">
+        <a class="boton" href="/aplicaciones/nueva">
+          Crear aplicación
+        </a>
+
+        <a class="boton boton-secundario" href="/carga">
+          Carga masiva
+        </a>
+      </section>
+
+
       <form action="/aplicaciones" method="GET">
         <label for="q">Buscar por nombre</label>
         <input id="q" name="q" type="search" maxlength="100" value="<%= busqueda %>"
