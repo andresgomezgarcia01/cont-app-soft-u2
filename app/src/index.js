@@ -1,5 +1,6 @@
-// Esqueleto mínimo para que el contenedor arranque y se verifique.
-// La especificación del desarrollo está en app/README.md.
+// Punto de entrada de la aplicación: configura Express, monta las rutas, responde
+// /health, muestra la página 404 y hace el apagado ordenado.
+// Las capas y sus archivos están descritos en docs/arquitectura.md.
 const express = require('express');
 const pool = require('./repositories/conexion');
 
